@@ -1,0 +1,17 @@
+# Render blueprint — https://render.com/docs/blueprint-spec
+#
+# New → Blueprint → select this repository. Render creates one free web service
+# that speaks WebSocket on the same port it serves /health from.
+services:
+  - type: web
+    name: airlock-relay
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production

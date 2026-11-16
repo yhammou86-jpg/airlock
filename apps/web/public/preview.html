@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Airlock · desktop preview</title>
+  <style>
+    html, body { margin: 0; background: #05070a; height: 100%; overflow: hidden; }
+    .frame { width: 1440px; height: 900px; transform-origin: top left; border: 0; display: block; }
+  </style>
+</head>
+<body>
+  <iframe class="frame" id="frame" src="/?demo=1&view=overview"></iframe>
+  <script>
+    // Screenshot harness: /preview.html?view=files&w=1440&h=900&scale=0.5
+    // Renders the dashboard at a fixed desktop viewport so layouts can be reviewed
+    // without resizing the browser window.
+    const q = new URLSearchParams(location.search);
+    const w = Number(q.get('w') || 1440);
+    const h = Number(q.get('h') || 900);
+    const scale = Number(q.get('scale') || Math.min(window.innerWidth / w, window.innerHeight / h));
+    const frame = document.getElementById('frame');
+    frame.src = `/?demo=1&view=${encodeURIComponent(q.get('view') || 'overview')}`;
+    frame.style.width = w + 'px';
+    frame.style.height = h + 'px';
+    frame.style.transform = `scale(${scale})`;
+    document.body.style.width = w * scale + 'px';
+    document.body.style.height = h * scale + 'px';
+  </script>
+</body>
+</html>

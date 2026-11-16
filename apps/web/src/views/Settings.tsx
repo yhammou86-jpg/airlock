@@ -1,0 +1,182 @@
+import React from 'react';
+import { Card, Icon, Pill } from '../components/ui';
+import type { Link, DeviceInfo, Stats, Connection } from '../lib/link';
+import type { Toast } from '../App';
+import { formatBytes, formatUptime } from '../lib/util';
+
+const PERMISSIONS = [
+  ['Files', 'MANAGE_EXTERNAL_STORAGE / READ_MEDIA_*', 'fs.list, fs.download, fs.upload'],
+  ['Screen mirror', 'MediaProjection consent (per session)', 'mirror.start'],
+  ['Remote control', 'AccessibilityService or the control add-on', 'input.tap / swipe / text / key'],
+  ['Notifications', 'NotificationListenerService', 'notif.list / reply / dismiss'],
+  ['SMS', 'READ_SMS, SEND_SMS', 'sms.threads / messages / send'],
+  ['Camera', 'CAMERA + foregroundServiceType=camera', 'camera.shot'],
+  ['Clipboard', 'Android 10+ blocks background clipboard read', 'device.action clipboard.*'],
+  ['Always online', 'Foreground service + battery optimisation exemption', 'push link'],
+];
+
+export function Settings({
+  link, device, stats, last, onDisconnect, toast,
+}: {
+  link: Link;
+  device: DeviceInfo | null;
+  stats: Stats;
+  last: Connection | null;
+  onDisconnect: () => void;
+  toast: (t: string, tone?: Toast['tone']) => void;
+}) {
+  const maskedToken = last?.token ? `${last.token.slice(0, 4)}…${last.token.slice(-4)}` : '—';
+
+  async function copy(text: string) {
+    try { await navigator.clipboard.writeText(text); toast('copied', 'ok'); } catch { toast('clipboard blocked', 'bad'); }
+  }
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>Settings</h1>
+          <p>Everything about this link, what the device grants, and how to self-host it.</p>
+        </div>
+        <div className="spacer" />
+        <button className="btn btn-danger btn-sm" onClick={onDisconnect}><Icon name="logout" size={14} /> Disconnect</button>
+      </div>
+
+      <div className="settings-grid">
+        <Card title="Connection">
+          <div className="kv"><span>Mode</span><span>{last?.mode || '—'}</span></div>
+          <div className="kv"><span>Label</span><span className="truncate" style={{ maxWidth: 220 }}>{last?.label || '—'}</span></div>
+          <div className="kv"><span>Socket</span><span className="truncate" style={{ maxWidth: 220 }}>{last?.url?.replace(/token=[^&]+/, 'token=***') || '—'}</span></div>
+          {last?.relay && <div className="kv"><span>Relay</span><span className="truncate" style={{ maxWidth: 220 }}>{last.relay}</span></div>}
+          {last?.room && <div className="kv"><span>Room</span><span>{maskedToken}</span></div>}
+          <div className="kv"><span>Transport</span><span>{last?.url?.startsWith('wss') ? 'TLS WebSocket' : 'plain WebSocket (LAN)'}</span></div>
+          <div className="kv"><span>Device</span><span>{device?.name || '—'}</span></div>
+          <div className="kv"><span>Device ID</span><span>{device?.id || '—'}</span></div>
+          <div className="kv"><span>Agent</span><span>{device?.agent || '—'}</span></div>
+          <div className="kv"><span>Battery / uptime</span><span>{stats.battery ?? '—'}% · {formatUptime(stats.uptime)}</span></div>
+        </Card>
+
+        <Card title="Self-host it">
+          <p className="muted" style={{ marginTop: 0, fontSize: 12.5 }}>
+            Three pieces, all free tier: a static dashboard (Vercel), a WebSocket relay
+            (Render / Deno Deploy / Fly) and, optionally, Supabase for accounts and history.
+          </p>
+          <div className="codeblock">
+            <span className="k">git clone</span> &lt;your fork&gt; airlock && <span className="k">cd</span> airlock{'\n'}
+            <span className="k">npm</span> install{'\n'}
+            <span className="k">npm</span> run relay   <span className="k">#</span> ws://localhost:8788{'\n'}
+            <span className="k">npm</span> run agent   <span className="k">#</span> demo device, code 123456{'\n'}
+            <span className="k">npm</span> run web     <span className="k">#</span> dashboard on :5173
+          </div>
+          <div className="row mt-16">
+            <button className="btn btn-sm" onClick={() => copy('npm install && npm run relay & npm run agent & npm run web')}>
+              <Icon name="clipboard" size={14} /> Copy commands
+            </button>
+            <a className="btn btn-sm" href="https://vercel.com/new" target="_blank" rel="noreferrer">
+              <Icon name="cloud" size={14} /> Deploy on Vercel
+            </a>
+          </div>
+          <p className="faint" style={{ fontSize: 11.5, marginBottom: 0 }}>
+            The Vercel build is fully static — no server functions, no database, no secrets in
+            the bundle.
+          </p>
+        </Card>
+
+        <Card title="Device permissions">
+          {PERMISSIONS.map(([name, perm, rpc]) => (
+            <div className="perm ok" key={name} style={{ marginBottom: 7 }}>
+              <Icon name="check" size={14} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 550 }}>{name}</div>
+                <div className="faint" style={{ fontSize: 11 }}>{perm}</div>
+              </div>
+              <span className="mono faint" style={{ marginLeft: 'auto', fontSize: 10.5, textAlign: 'right' }}>{rpc}</span>
+            </div>
+          ))}
+          <p className="faint" style={{ fontSize: 11.5, marginBottom: 0 }}>
+            Android 14 requires a visible foreground-service notification for screen capture,
+            camera and microphone. Airlock surfaces that instead of hiding it.
+          </p>
+        </Card>
+
+        <Card title="Security model">
+          <div className="timeline">
+            <div className="rail" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <b style={{ fontSize: 12.5 }}>Pairing</b>
+                <p className="muted" style={{ margin: '2px 0 0', fontSize: 12 }}>
+                  A six-digit code is bound to one room and expires after 10 minutes. The
+                  relay only exchanges it for a 32-byte room token.
+                </p>
+              </div>
+              <div>
+                <b style={{ fontSize: 12.5 }}>Transport</b>
+                <p className="muted" style={{ margin: '2px 0 0', fontSize: 12 }}>
+                  Always prefer <code>wss://</code>. LAN mode is plaintext WebSocket inside
+                  your own network; the agent refuses files outside its sandbox.
+                </p>
+              </div>
+              <div>
+                <b style={{ fontSize: 12.5 }}>What the relay sees</b>
+                <p className="muted" style={{ margin: '2px 0 0', fontSize: 12 }}>
+                  Room id, role, frame sizes and timing. Not filenames, not SMS, not screen
+                  content — unless TLS is terminated at the relay and you operate it.
+                </p>
+              </div>
+              <div>
+                <b style={{ fontSize: 12.5 }}>Roadmap: E2E</b>
+                <p className="muted" style={{ margin: '2px 0 0', fontSize: 12 }}>
+                  Derive an AES-256-GCM key from the pairing code (PBKDF2-SHA256, 200k
+                  iterations, room salt) and encrypt every envelope. The protocol reserves
+                  the <code>flags</code> byte for this.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="row mt-16">
+            <Pill tone="ok"><Icon name="shield" size={12} /> no telemetry</Pill>
+            <Pill tone="muted">no ads</Pill>
+            <Pill tone="info">MIT</Pill>
+          </div>
+        </Card>
+
+        <Card title="Protocol">
+          <p className="muted" style={{ marginTop: 0, fontSize: 12.5 }}>
+            Every action is one JSON envelope; media and files are 16-byte-header binary
+            frames. Full reference in <span className="mono">docs/PROTOCOL.md</span>.
+          </p>
+          <div className="codeblock">
+            {'→ {"type":"fs.list","data":{"path":"/"}}\n'}
+            {'← {"type":"res:fs.list","ok":true,\n'}
+            {'   "data":{"entries":[{"name":"Photos","dir":true}]}}\n\n'}
+            {'→ {"type":"mirror.start","data":{"fps":10}}\n'}
+            {'← [binary] kind=1 codec=3 jpeg/webp/svg bytes…\n'}
+          </div>
+          <div className="kv mt-16"><span>Free space</span><span>{formatBytes(stats.storage?.free)}</span></div>
+          <div className="kv"><span>Memory</span><span>{stats.mem ? `${formatBytes(stats.mem.total - stats.mem.free)} / ${formatBytes(stats.mem.total)}` : '—'}</span></div>
+          <div className="kv"><span>Link state</span><span>{link.status}</span></div>
+        </Card>
+
+        <Card title="About">
+          <p className="muted" style={{ marginTop: 0, fontSize: 12.5 }}>
+            Airlock is a clean-room reimplementation of the AirDroid feature set built
+            for free-tier hosting. It shares no code, assets or protocol with AirDroid.
+            Do not use it to access devices you do not own.
+          </p>
+          <div className="kv"><span>Dashboard</span><span>1.0.0</span></div>
+          <div className="kv"><span>Protocol</span><span>1</span></div>
+          <div className="kv"><span>License</span><span>MIT</span></div>
+          <div className="row mt-16">
+            <button className="btn btn-sm" onClick={() => copy('https://github.com/storytold/craft-anything')}>
+              <Icon name="link" size={14} /> Research notes
+            </button>
+            <button className="btn btn-sm" onClick={() => location.reload()}>
+              <Icon name="refresh" size={14} /> Reload
+            </button>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,10 @@
+{
+  "name": "@airlock/agent",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "bin": { "airlock-agent": "agent.mjs" },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

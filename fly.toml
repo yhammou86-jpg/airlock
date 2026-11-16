@@ -1,0 +1,21 @@
+# Fly.io alternative to Render. `fly launch --no-deploy --copy-config` then
+# `fly deploy`. Free allowances changed in 2024; check your account first.
+app = "airlock-relay"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "10000"
+
+[http_service]
+  internal_port = 10000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

@@ -1,0 +1,25 @@
+{
+  "name": "airlock",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Airlock — open, self-hostable AirDroid alternative: Android device agent + browser dashboard",
+  "workspaces": [
+    "apps/web",
+    "apps/agent",
+    "apps/relay"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "web": "npm --workspace apps/web run dev",
+    "agent": "node apps/agent/agent.mjs",
+    "relay": "node apps/relay/server.mjs",
+    "pair": "node scripts/pair.mjs",
+    "e2e": "node scripts/e2e.mjs",
+    "build": "npm --workspace apps/web run build",
+    "typecheck": "npm --workspace apps/web run typecheck"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

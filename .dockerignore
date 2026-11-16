@@ -1,0 +1,14 @@
+.git
+.github
+node_modules
+**/node_modules
+apps/web
+apps/android
+apps/agent
+docs
+_extract
+*.xapk
+*.md
+.env
+.env.*
+.DS_Store
