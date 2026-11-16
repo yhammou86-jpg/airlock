@@ -2,8 +2,7 @@
 /**
  * Start the whole stack with one command: relay + reference agent + dashboard.
  *
- *   npm run dev            # LAN demo on :5173, agent :8787, relay :8788
- *   npm run dev -- --tunnel # optional: expose the relay through a public URL
+ *   npm run dev            # dashboard :5173, agent :8787, relay :8788
  *
  * Every child gets a coloured prefix so three log streams stay readable.
  */
@@ -13,16 +12,19 @@ import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const isWindows = process.platform === 'win32';
 
 const COLORS = { relay: '\x1b[38;5;45m', agent: '\x1b[38;5;141m', web: '\x1b[38;5;220m' };
 const RESET = '\x1b[0m';
 
 const children = [];
-function start(label, command, args, cwd = root) {
+let shuttingDown = false;
+
+function start(label, command, args) {
+  // shell:false keeps paths with spaces ("C:\Program Files\nodejs\node.exe")
+  // intact; npm on Windows is invoked through cmd.exe explicitly.
   const child = spawn(command, args, {
-    cwd,
-    shell: process.platform === 'win32',
+    cwd: root,
     env: { ...process.env, FORCE_COLOR: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -39,14 +41,20 @@ function start(label, command, args, cwd = root) {
   return child;
 }
 
-let shuttingDown = false;
 function shutdown(code = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
   for (const c of children) {
-    if (!c.killed) { try { c.kill('SIGTERM'); } catch { /* ignore */ } }
+    if (!c.killed) {
+      try {
+        if (isWindows) spawn('taskkill', ['/pid', String(c.pid), '/t', '/f'], { stdio: 'ignore' });
+        else c.kill('SIGTERM');
+      } catch {
+        /* ignore */
+      }
+    }
   }
-  setTimeout(() => process.exit(code), 300);
+  setTimeout(() => process.exit(code), 400);
 }
 
 process.on('SIGINT', () => shutdown(0));
@@ -60,4 +68,12 @@ console.log('  relay      http://localhost:8788/health\n');
 
 start('relay', process.execPath, ['apps/relay/server.mjs']);
 start('agent', process.execPath, ['apps/agent/agent.mjs', '--name', 'Pixel 8 (dev)']);
-start('web', npm, ['--workspace', 'apps/web', 'run', 'dev', '--', '--host', '127.0.0.1']);
+
+if (isWindows) {
+  start('web', process.env.ComSpec || 'cmd.exe', [
+    '/d', '/s', '/c',
+    'npm --workspace apps/web run dev -- --host 127.0.0.1',
+  ]);
+} else {
+  start('web', 'npm', ['--workspace', 'apps/web', 'run', 'dev', '--', '--host', '127.0.0.1']);
+}

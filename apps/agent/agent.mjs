@@ -143,7 +143,7 @@ function storageInfo() {
 }
 
 let lastCpu = os.cpus().map((c) => c.times);
-let cpuAvg: number | null = null;
+let cpuAvg = null;
 function cpuPercent() {
   const now = os.cpus().map((c) => c.times);
   let idle = 0; let total = 0;
