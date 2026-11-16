@@ -4,7 +4,7 @@ app = "airlock-relay"
 primary_region = "iad"
 
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = "deploy/relay/Dockerfile"
 
 [env]
   PORT = "10000"

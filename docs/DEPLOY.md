@@ -1,0 +1,165 @@
+# Deploy Airlock for free
+
+Three pieces, three free tiers. The dashboard is static, the relay is a tiny
+container, and Supabase is optional.
+
+| piece | host | free tier | notes |
+| --- | --- | --- | --- |
+| `apps/web` | Vercel (Hobby) | 100 GB bandwidth | static build, no functions needed |
+| `apps/relay` | Render (free web service) | 750 h/month, sleeps after 15 min idle | Docker, one instance, in-memory rooms |
+| database | Supabase (free) | 500 MB Postgres | only if you want accounts/history |
+
+Alternative relay hosts with the same `Dockerfile`: Fly.io, Koyeb, Railway,
+Northflank. Any host that keeps one container alive and allows WebSocket
+upgrades works.
+
+---
+
+## 1. Dashboard → Vercel
+
+### From the CLI (what this repo was deployed with)
+
+```bash
+npm i -g vercel
+vercel login
+vercel deploy --prod        # from the repository root
+```
+
+`vercel.json` already sets:
+
+- install: `npm install` (workspace-aware)
+- build: `npm run build --workspace @airlock/web`
+- output: `apps/web/dist`
+
+### From the dashboard
+
+1. **Add New… → Project → Import** `yhammou86-jpg/airlock`.
+2. Framework preset: **Other**. Root directory: **/**.
+3. Build command: `npm run build --workspace @airlock/web`.
+   Output directory: `apps/web/dist`.
+4. Add environment variable `VITE_RELAY_URL` = your relay URL (see step 2),
+   for all environments. Example: `https://airlock-relay.onrender.com`.
+5. Deploy.
+
+Without `VITE_RELAY_URL` the dashboard still works; the relay field on the
+Connect screen is simply empty until you paste a URL. `?relay=https://…&code=123456`
+also works and is what `npm run pair` prints.
+
+---
+
+## 2. Relay → Render
+
+1. Open the blueprint:
+   **https://render.com/deploy?repo=https://github.com/yhammou86-jpg/airlock**
+2. Sign in with GitHub and approve access to the repository.
+3. Render reads `render.yaml`, shows one free **Web service** named
+   `airlock-relay`, and builds `deploy/relay/Dockerfile`.
+4. Create the service. First build takes 2–4 minutes.
+5. Copy the URL, e.g. `https://airlock-relay.onrender.com`, and check
+   `https://airlock-relay.onrender.com/health` returns
+   `{"ok":true,"version":1,...}`.
+
+Free services sleep after 15 minutes without traffic. The first WebSocket
+connect after sleep can take ~40 seconds; the dashboard retries automatically.
+For an always-warm relay, Render's cheapest paid instance or any small VPS will
+do — nothing else changes.
+
+### Fly.io / Koyeb / Railway instead
+
+```bash
+fly launch --no-deploy --copy-config   # uses fly.toml + deploy/relay/Dockerfile
+fly deploy
+```
+
+or build the image yourself:
+
+```bash
+docker build -f deploy/relay/Dockerfile -t airlock-relay .
+docker run -p 10000:10000 airlock-relay
+```
+
+The relay listens on `$PORT` (default 8788 locally, 10000 in the image).
+
+---
+
+## 3. Tell the dashboard where the relay is
+
+Vercel CLI:
+
+```bash
+vercel env add VITE_RELAY_URL production
+# paste https://airlock-relay.onrender.com
+vercel deploy --prod
+```
+
+Dashboard UI: **Settings → Environment Variables → VITE_RELAY_URL**, then
+redeploy. Vite inlines the value at build time, so a redeploy is required.
+
+---
+
+## 4. Optional: accounts and history (Supabase)
+
+The product is fully usable without it. To enable history:
+
+1. Create a project at supabase.com (free).
+2. SQL editor → paste `supabase/migrations/001_init.sql` → run.
+3. Copy the project URL + anon key into the dashboard build environment
+   (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`) when you add the optional
+   history UI.
+
+The migration creates `devices`, `pairings`, `sessions`, `sms_messages`,
+`notifications`, `transfers` and `audit_log`, all protected by row level security
+keyed on `auth.uid()`, plus a `device_overview` view. Only SHA-256 hashes of
+pairing codes are stored. The relay never gets database credentials.
+
+---
+
+## 5. Pair a phone
+
+On the phone agent:
+
+1. Start the agent → note the LAN address and code, or tap **Create room** and
+   type your relay URL first.
+2. Approve screen capture and the permissions you want.
+
+In the dashboard:
+
+- **Demo device** → `ws://localhost:8787/agent` with code `123456` (reference agent).
+- **LAN** → `ws://<phone-ip>:8787/agent` + the six digit code.
+- **Cloud relay** → relay URL + the six digit room code.
+
+From a terminal:
+
+```bash
+npm run pair -- --relay https://airlock-relay.onrender.com --web https://airlock-rho.vercel.app
+```
+
+It prints the code, a pre-filled dashboard link, and the matching agent command.
+
+---
+
+## 6. Hardening checklist
+
+- [ ] Rotate the LAN code after pairing guests.
+- [ ] Serve the relay over HTTPS only (Render/Fly do this automatically).
+- [ ] Do not reuse the relay room token in links; it is a bearer secret.
+- [ ] Keep the dashboard and relay on the same major version.
+- [ ] If you self-host the relay, restrict it to your own domain and monitor
+      `/health`.
+- [ ] Remember the relay can read forwarded frames. Use LAN, or your own relay,
+      for traffic you would not send through a third party.
+- [ ] Set `cleartextTrafficPermitted="false"` in
+      `apps/android/app/src/main/res/xml/network_security_config.xml` if you
+      only ever use the cloud.
+
+## 7. What the free tiers cannot do
+
+- Render free sleeps; a sleeping relay drops both sockets. Clients reconnect,
+  but the room is re-created on the next `POST /api/pair`.
+- Vercel Functions now support WebSockets, but each connection is capped
+  (300 s on Hobby) and instances are not shared, so Airlock uses a single
+  container for rooms instead of function-based fan-out.
+- Supabase free pauses after a week of inactivity; history is optional and
+  non-blocking.
+- No free host provides TURN. If you later add WebRTC mirroring, budget for a
+  TURN service; JPEG-over-WebSocket needs none.

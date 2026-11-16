@@ -22,3 +22,5 @@ apps/android/.idea/
 apps/android/**/build/
 *.keystore
 *.jks
+
+.vercel
