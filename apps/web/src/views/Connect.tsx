@@ -165,6 +165,17 @@ export function Connect({ onConnect, busy, error, relayDefault, last }: Props) {
           <Icon name="shield" size={14} />
           <span>Pairing code is single-use. The relay sees only routing metadata.</span>
         </div>
+
+        <div className="connect-foot">
+          <Icon name="phone" size={14} />
+          <span>
+            Android agent:{' '}
+            <a href="/airlock-1.0.0-debug.apk" download>
+              download the APK
+            </a>{' '}
+            (debug build, sideload)
+          </span>
+        </div>
       </Card>
     </div>
   );
