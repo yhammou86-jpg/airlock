@@ -93,9 +93,15 @@ It must be sideloaded because `READ_SMS`, `SEND_SMS` and
 and the permission rationale are in
 [`apps/android/README.md`](./apps/android/README.md).
 
-> This workspace had no JDK or Android SDK, so the Android module ships as
-> source with build steps rather than a compiled APK. Everything else — relay,
-> dashboard, agent and the full protocol — is built and tested here.
+A compiled debug build is available for direct download:
+
+| build | size | package |
+| --- | --- | --- |
+| [Airlock 1.0.0 (debug)](https://airlock-rho.vercel.app/airlock-1.0.0-debug.apk) | 9.7 MiB | `dev.airlock.agent`, minSdk 26, targetSdk 34 |
+
+It is debug-signed with the standard Android debug keystore, which is fine for
+sideloading but not for a store. Open the link on the phone and allow installs
+from the browser, or `adb install -r airlock-1.0.0-debug.apk`.
 
 ## Test
 

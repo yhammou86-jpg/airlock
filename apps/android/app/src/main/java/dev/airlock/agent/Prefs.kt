@@ -24,7 +24,7 @@ class Prefs(context: Context) {
         private set(value) = sp.edit().putString("code", value).apply()
 
     var relayUrl: String
-        get() = sp.getString("relay", null) ?: "https://airlock-relay.onrender.com"
+        get() = sp.getString("relay", null) ?: "https://airlock-relay.y-hammou86.workers.dev"
         set(value) = sp.edit().putString("relay", value.trimEnd('/')).apply()
 
     var room: String?

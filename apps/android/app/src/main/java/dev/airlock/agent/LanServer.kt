@@ -47,13 +47,14 @@ class LanServer(
 
     override fun openWebSocket(handshake: IHTTPSession): WebSocket {
         val code = handshake.parameters["code"]?.firstOrNull()
-        return LanPeer("lan-${nextId.incrementAndGet()}", code)
+        return LanPeer("lan-${nextId.incrementAndGet()}", code, handshake)
     }
 
     inner class LanPeer(
         override val peerId: String,
         override val providedCode: String?,
-    ) : WebSocket(), Peer {
+        session: IHTTPSession,
+    ) : WebSocket(session), Peer {
 
         override val remote: Boolean = false
         override val state = PeerState(remote = false)
@@ -94,13 +95,10 @@ class LanServer(
         }
 
         override fun onMessage(message: WebSocketFrame) {
-            if (message.isBinary) {
-                val buf = message.binaryPayload
-                val bytes = ByteArray(buf.remaining())
-                buf.get(bytes)
-                core.onBinary(this, bytes)
-            } else if (message.isText) {
-                core.onText(this, message.textPayload)
+            when (message.opCode) {
+                WebSocketFrame.OpCode.Binary -> core.onBinary(this, message.binaryPayload)
+                WebSocketFrame.OpCode.Text -> core.onText(this, message.textPayload)
+                else -> {}
             }
         }
 

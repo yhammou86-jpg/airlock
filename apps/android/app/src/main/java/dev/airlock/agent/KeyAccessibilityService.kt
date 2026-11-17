@@ -79,8 +79,9 @@ class KeyAccessibilityService : AccessibilityService() {
                 node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
             }
             "enter" -> {
-                // Most IMEs expose an ACTION_IME_ENTER on the focused field.
-                node.performAction(AccessibilityNodeInfo.ACTION_IME_ENTER)
+                // Most IMEs expose ACTION_IME_ENTER on the focused field
+                // (an AccessibilityAction, not an int constant).
+                node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
             }
             else -> false
         }

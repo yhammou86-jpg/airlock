@@ -43,7 +43,11 @@ class ScreenCapture(private val context: Context) {
     fun setProjection(resultCode: Int, data: android.content.Intent): Boolean {
         val manager = context.getSystemService(MediaProjectionManager::class.java)
         stop()
-        projection?.release()
+        try {
+            projection?.stop()
+        } catch (_: Exception) {
+        }
+        projection = null
         projection = try {
             manager.getMediaProjection(resultCode, data)
         } catch (e: Exception) {

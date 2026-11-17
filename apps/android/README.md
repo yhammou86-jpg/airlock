@@ -23,24 +23,40 @@ app/src/main/java/dev/airlock/agent/
 
 ## Build
 
-You need JDK 17 and Android SDK 34. Easiest path is Android Studio (Ladybug or
-newer):
-
-1. **File → Open** → `apps/android`.
-2. Let Gradle sync (it downloads the wrapper through Android Studio).
-3. Run the `app` configuration on a device with USB debugging enabled.
-
-Command line, if your machine already has Gradle 8.7+:
+Requires JDK 17 and Android SDK 34 (build-tools 34.0.0). No Android Studio
+needed; any of these work:
 
 ```bash
 cd apps/android
-gradle wrapper --gradle-version 8.7   # creates gradlew + wrapper jar
-./gradlew assembleDebug
+echo "sdk.dir=/path/to/android-sdk" > local.properties
+gradle assembleDebug          # or ./gradlew assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
+`local.properties` is gitignored — each machine writes its own SDK path.
+
+### Verified build
+
+This tree has been compiled for real, not just reviewed:
+
+| item | value |
+| --- | --- |
+| command | `gradle assembleDebug` (Gradle 8.7, JDK 17.0.21, AGP 8.5.2) |
+| output | `app/build/outputs/apk/debug/app-debug.apk` |
+| size | 10,163,145 bytes (9.7 MiB) |
+| package | `dev.airlock.agent` 1.0.0, minSdk 26, targetSdk 34 |
+| signing | debug keystore (`CN=Android Debug`), sideload only |
+
+A copy is published with the dashboard at
+<https://airlock-rho.vercel.app/airlock-1.0.0-debug.apk>.
+
 The repo intentionally does not commit `gradle-wrapper.jar`; generate it once
-with the command above or let Android Studio create it.
+with `gradle wrapper --gradle-version 8.7` or let Android Studio create it.
+
+The APK is compile-verified only: this machine had no emulator or USB device
+attached, so runtime behaviour (MediaProjection, accessibility injection, SMS)
+is untested. Test those on hardware before relying on them.
+
 
 ## First run
 
@@ -73,6 +89,3 @@ permission before installing.
   keys need root or device-owner privileges.
 - Clipboard reads are blocked by Android 10+ while another app is focused.
 - SMS sending uses the default SIM only.
-- The agent cannot be built in this workspace: no JDK/Android SDK was available.
-  The source is complete and mirrors the protocol that *was* tested end-to-end
-  against the Node reference agent.
