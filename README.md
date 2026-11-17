@@ -8,6 +8,7 @@ then browse files, mirror the screen, tap and type, read SMS, follow
 notifications and grab camera snapshots. No account, no ads, no telemetry.
 
 - Dashboard: <https://airlock-rho.vercel.app>
+- Relay: <https://airlock-relay.y-hammou86.workers.dev> (`/health` for status)
 - Source: <https://github.com/yhammou86-jpg/airlock>
 - License: MIT
 

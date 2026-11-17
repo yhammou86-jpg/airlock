@@ -154,7 +154,7 @@ In the dashboard:
 From a terminal:
 
 ```bash
-npm run pair -- --relay https://airlock-relay.onrender.com --web https://airlock-rho.vercel.app
+npm run pair -- --relay https://airlock-relay.<subdomain>.workers.dev --web https://airlock-rho.vercel.app
 ```
 
 It prints the code, a pre-filled dashboard link, and the matching agent command.
@@ -177,11 +177,14 @@ It prints the code, a pre-filled dashboard link, and the matching agent command.
 
 ## 7. What the free tiers cannot do
 
+- Cloudflare's free plan is request-metered: a busy mirror stream spends the
+  daily allowance faster than idle pairing does. Hibernation keeps idle rooms
+  free, and the sockets survive it.
 - Render free sleeps; a sleeping relay drops both sockets. Clients reconnect,
   but the room is re-created on the next `POST /api/pair`.
 - Vercel Functions now support WebSockets, but each connection is capped
-  (300 s on Hobby) and instances are not shared, so Airlock uses a single
-  container for rooms instead of function-based fan-out.
+  (300 s on Hobby) and instances are not shared, so Airlock uses a relay with
+  per-room state instead of function-based fan-out.
 - Supabase free pauses after a week of inactivity; history is optional and
   non-blocking.
 - No free host provides TURN. If you later add WebRTC mirroring, budget for a
