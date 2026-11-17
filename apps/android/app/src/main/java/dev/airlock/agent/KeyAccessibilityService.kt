@@ -80,8 +80,12 @@ class KeyAccessibilityService : AccessibilityService() {
             }
             "enter" -> {
                 // Most IMEs expose ACTION_IME_ENTER on the focused field
-                // (an AccessibilityAction, not an int constant).
-                node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
+                // (an AccessibilityAction, not an int constant). API 30+.
+                if (android.os.Build.VERSION.SDK_INT >= 30) {
+                    node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
+                } else {
+                    false
+                }
             }
             else -> false
         }
