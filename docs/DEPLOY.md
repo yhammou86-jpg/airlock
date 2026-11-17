@@ -6,12 +6,13 @@ container, and Supabase is optional.
 | piece | host | free tier | notes |
 | --- | --- | --- | --- |
 | `apps/web` | Vercel (Hobby) | 100 GB bandwidth | static build, no functions needed |
+| `apps/relay-worker` | Cloudflare Workers + Durable Objects | 100k requests/day, no sleep | **recommended**: hibernates, wakes in ms |
 | `apps/relay` | Render (free web service) | 750 h/month, sleeps after 15 min idle | Docker, one instance, in-memory rooms |
 | database | Supabase (free) | 500 MB Postgres | only if you want accounts/history |
 
-Alternative relay hosts with the same `Dockerfile`: Fly.io, Koyeb, Railway,
-Northflank. Any host that keeps one container alive and allows WebSocket
-upgrades works.
+Both relays speak the same protocol; pick one. The Worker is the better default
+because it never cold-starts, while the container host is the fallback for
+people who would rather run a process they control.
 
 ---
 
@@ -47,7 +48,29 @@ also works and is what `npm run pair` prints.
 
 ---
 
-## 2. Relay → Render
+## 2. Relay → Cloudflare Workers (recommended)
+
+No container, no cold start, free plan includes Durable Objects (SQLite
+backed). One command deploys it:
+
+```bash
+cd apps/relay-worker
+npx wrangler login        # browser OAuth, once
+npx wrangler deploy       # prints https://airlock-relay.<subdomain>.workers.dev
+```
+
+Then check `https://airlock-relay.<subdomain>.workers.dev/health` →
+`{"ok":true,"version":1,...}`. The relay config lives in
+`apps/relay-worker/wrangler.toml`; nothing else needs to change.
+
+Try it locally first if you like — workerd runs Durable Objects on your machine:
+
+```bash
+npm run relay:worker      # http://127.0.0.1:8789
+RELAY=http://127.0.0.1:8789 npm run e2e
+```
+
+### 2b. Relay → Render (container alternative)
 
 1. Open the blueprint:
    **https://render.com/deploy?repo=https://github.com/yhammou86-jpg/airlock**
@@ -88,7 +111,7 @@ Vercel CLI:
 
 ```bash
 vercel env add VITE_RELAY_URL production
-# paste https://airlock-relay.onrender.com
+# paste https://airlock-relay.<subdomain>.workers.dev
 vercel deploy --prod
 ```
 

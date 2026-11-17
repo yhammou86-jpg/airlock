@@ -109,14 +109,26 @@ export default function App() {
     }
     const code = params.get('code');
     if (code) {
-      const relay = params.get('relay') || relayDefault;
+      const relay = (params.get('relay') || relayDefault).replace(/\/+$/, '');
       setConnecting(true);
       claimPairCode(relay, code)
         .then(({ room, token }) => connect({
           mode: 'cloud', label: `Cloud · room ${code}`,
           url: cloudSocketUrl(relay, room, token, 'controller'), relay, room, token,
         }))
-        .catch((e) => { setConnecting(false); setErr(e?.message || 'pairing code not found or expired'); });
+        .catch((e) => {
+          // Codes are single use, so refreshing a shared link would otherwise
+          // land on an error screen. Reuse the connection we stored the first
+          // time the same link worked.
+          let saved: Connection | null = null;
+          try { saved = JSON.parse(localStorage.getItem('airlock.last') || 'null'); } catch {}
+          if (saved?.mode === 'cloud' && saved.relay.replace(/\/+$/, '') === relay && saved.label === `Cloud · room ${code}`) {
+            connect(saved);
+            return;
+          }
+          setConnecting(false);
+          setErr(e?.message || 'pairing code not found or expired');
+        });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

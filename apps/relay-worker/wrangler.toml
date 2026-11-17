@@ -1,0 +1,31 @@
+# Airlock relay — Cloudflare Workers + Durable Objects
+#
+# One Durable Object per room makes the relay sticky by construction: both the
+# phone and every browser land on the same isolate, so no shared memory or
+# external store is needed for routing. Hibernatable WebSockets keep an idle
+# room free (no duration billing while nobody is sending frames).
+#
+# Deploy:  npx wrangler deploy      (from this directory)
+# Local:   npm run dev              -> http://127.0.0.1:8789
+
+name = "airlock-relay"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+workers_dev = true
+preview_urls = true
+
+[observability]
+enabled = true
+
+[[durable_objects.bindings]]
+name = "PAIRING"
+class_name = "Pairing"
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+# Durable Objects must be SQLite-backed on the free plan.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Pairing", "Room"]

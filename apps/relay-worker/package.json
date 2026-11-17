@@ -1,0 +1,15 @@
+{
+  "name": "@airlock/relay-worker",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Airlock relay on Cloudflare Workers + Durable Objects (free plan, no sleep)",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8789",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
