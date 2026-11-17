@@ -97,7 +97,7 @@ A compiled debug build is available for direct download:
 
 | build | size | package |
 | --- | --- | --- |
-| [Airlock 1.0.0 (debug)](https://airlock-rho.vercel.app/airlock-1.0.0-debug.apk) | 9.7 MiB | `dev.airlock.agent`, minSdk 26, targetSdk 34 |
+| [Airlock 1.0.0 (debug)](https://airlock-rho.vercel.app/airlock-1.0.0-debug.apk) | 9.8 MiB | `dev.airlock.agent`, minSdk 26, targetSdk 34 |
 
 It is debug-signed with the standard Android debug keystore, which is fine for
 sideloading but not for a store. Open the link on the phone and allow installs

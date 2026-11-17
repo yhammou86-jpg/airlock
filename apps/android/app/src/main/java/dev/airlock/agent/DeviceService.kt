@@ -85,13 +85,19 @@ class DeviceService : Service(), LifecycleOwner {
                 val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
                 @Suppress("DEPRECATION")
                 val data = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
-                if (data != null && screen.setProjection(resultCode, data)) {
+                if (data != null) {
+                    // Android 11+ requires the foreground-service type to be
+                    // mediaProjection *before* getMediaProjection() is called.
                     foreground(
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
                             ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
                     )
-                    state.update { it.copy(mirrored = true, error = null) }
-                    Log.i(TAG, "projection approved")
+                    if (screen.setProjection(resultCode, data)) {
+                        state.update { it.copy(mirrored = true, error = null) }
+                        Log.i(TAG, "projection approved")
+                    } else {
+                        state.update { it.copy(error = "screen capture was not approved") }
+                    }
                 } else {
                     state.update { it.copy(error = "screen capture was not approved") }
                 }

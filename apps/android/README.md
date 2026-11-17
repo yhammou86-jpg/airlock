@@ -43,9 +43,10 @@ This tree has been compiled for real, not just reviewed:
 | --- | --- |
 | command | `gradle assembleDebug` (Gradle 8.7, JDK 17.0.21, AGP 8.5.2) |
 | output | `app/build/outputs/apk/debug/app-debug.apk` |
-| size | 10,163,145 bytes (9.7 MiB) |
+| size | 10,269,960 bytes (9.8 MiB) |
 | package | `dev.airlock.agent` 1.0.0, minSdk 26, targetSdk 34 |
 | signing | debug keystore (`CN=Android Debug`), sideload only |
+| sha256 | `dbfd7444adc23fae38e94a99ad205fa32c59949c917189f41907f3f21b8feea6` |
 
 A copy is published with the dashboard at
 <https://airlock-rho.vercel.app/airlock-1.0.0-debug.apk>.
