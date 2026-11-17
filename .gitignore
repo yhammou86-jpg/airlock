@@ -23,4 +23,8 @@ apps/android/**/build/
 *.keystore
 *.jks
 
+# cloudflare worker (wrangler)
+apps/relay-worker/.wrangler/
+apps/relay-worker/.dev.vars
+
 .vercel
