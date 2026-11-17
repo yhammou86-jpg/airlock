@@ -225,6 +225,12 @@ Rooms are in memory, reaped ten minutes after they go idle. The relay never
 reads payloads beyond the JSON `type`/`hello` cache, never stores files, and
 never terminates TLS itself when deployed behind Render/Fly.
 
+The Cloudflare Workers build in `apps/relay-worker` serves the same four routes
+with identical status codes and bodies, except that `/health` reports
+`"waiting": null` and `"uptime": null` (a Worker has no process to ask). Rooms
+live in a Durable Object each, which is why a late controller still receives the
+cached `hello`.
+
 ## 6. Compatibility notes
 
 - Unknown `type` values must fail with `unknown_type`, not close the socket.

@@ -55,11 +55,13 @@ open the link.
 Three pieces, all free tier:
 
 1. **Dashboard** → Vercel (static). `vercel deploy --prod`.
-2. **Relay** → Render (Docker, one free web service). One click:
-   <https://render.com/deploy?repo=https://github.com/yhammou86-jpg/airlock>
+2. **Relay** → Cloudflare Workers (Durable Objects, no sleep):
+   `cd apps/relay-worker && npx wrangler login && npx wrangler deploy`.
+   Prefer a container? Render's blueprint is one click too:
+   <https://render.com/deploy?repo=https://github.com/yhammou86-jpg/airlock>.
 3. **History (optional)** → Supabase. Run `supabase/migrations/001_init.sql`.
 
-Set `VITE_RELAY_URL` on Vercel to the Render URL and redeploy. Full steps,
+Set `VITE_RELAY_URL` on Vercel to the relay URL and redeploy. Full steps,
 alternatives (Fly/Koyeb/Railway), the hardening checklist and the honest limits
 of each free tier are in [`docs/DEPLOY.md`](./docs/DEPLOY.md).
 

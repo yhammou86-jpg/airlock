@@ -33,7 +33,7 @@ Airlock is three small programs that share one wire format:
 | concern | choice | reason |
 | --- | --- | --- |
 | dashboard hosting | static files on Vercel | free, fast, no server to keep alive |
-| relay hosting | long-lived Node process | WebSockets need a persistent connection; free serverless shapes (classic functions) cannot hold one |
+| relay hosting | Cloudflare Workers + Durable Objects (or a Node container) | WebSockets need a persistent connection; a Durable Object per room gives one without an always-on server |
 | phone transport | embedded WebSocket | no cloud dependency on the same Wi-Fi, and the same protocol over WAN |
 | media | JPEG frames over the same socket | works everywhere, no codec negotiation, easy to audit; H.264/WebRTC is a future upgrade |
 | files | chunked binary frames | no S3, no bucket, no retention; bytes go phone ↔ browser |
@@ -105,7 +105,8 @@ The full teardown, including which claims are observed vs inferred, is in
 
 ```
 apps/web        dashboard (React, no UI framework)
-apps/relay      WebSocket relay + pairing API
+apps/relay      WebSocket relay + pairing API (Node, for containers)
+apps/relay-worker  same relay on Cloudflare Workers + Durable Objects
 apps/agent      reference phone (Node) — executable spec for the Android app
 apps/android    real phone agent (Kotlin, Compose)
 packages/protocol   the only shared code: framing + envelope helpers
