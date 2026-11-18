@@ -14,7 +14,7 @@ export function Notifications({ link, toast }: { link: Link; toast: (t: string, 
 
   async function load() {
     try {
-      const res = await link.request<any>('notif.list');
+      const res = await link.request<any>('notif.list', {}, 45000);
       setItems(res.notifications || []);
     } catch (e: any) {
       toast(e?.message || 'could not load notifications', 'bad');
@@ -61,6 +61,27 @@ export function Notifications({ link, toast }: { link: Link; toast: (t: string, 
         <div className="spacer" />
         <button className="btn btn-sm" onClick={load}><Icon name="refresh" size={14} /> Refresh</button>
       </div>
+
+      {link.device?.permissions?.notifications === false && (
+        <div className="warn-strip" style={{ marginBottom: 14 }}>
+          <Icon name="warning" size={15} />
+          <span>Notification access is off on the phone, so the feed cannot sync.</span>
+          <button
+            className="btn btn-sm"
+            style={{ marginLeft: 'auto' }}
+            onClick={async () => {
+              try {
+                await link.request('device.permission', { permission: 'notification_access' });
+                toast('settings opened on the phone', 'ok');
+              } catch (e: any) {
+                toast(e?.message || 'open Airlock → Permissions on the phone', 'warn');
+              }
+            }}
+          >
+            Enable
+          </button>
+        </div>
+      )}
 
       <Card title={`Feed · ${items.length}`}>
         {loading && <div style={{ padding: 24, textAlign: 'center' }}><Spinner /></div>}

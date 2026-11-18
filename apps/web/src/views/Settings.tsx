@@ -4,15 +4,17 @@ import type { Link, DeviceInfo, Stats, Connection } from '../lib/link';
 import type { Toast } from '../App';
 import { formatBytes, formatUptime } from '../lib/util';
 
-const PERMISSIONS = [
-  ['Files', 'MANAGE_EXTERNAL_STORAGE / READ_MEDIA_*', 'fs.list, fs.download, fs.upload'],
-  ['Screen mirror', 'MediaProjection consent (per session)', 'mirror.start'],
-  ['Remote control', 'AccessibilityService or the control add-on', 'input.tap / swipe / text / key'],
-  ['Notifications', 'NotificationListenerService', 'notif.list / reply / dismiss'],
-  ['SMS', 'READ_SMS, SEND_SMS', 'sms.threads / messages / send'],
-  ['Camera', 'CAMERA + foregroundServiceType=camera', 'camera.shot'],
-  ['Clipboard', 'Android 10+ blocks background clipboard read', 'device.action clipboard.*'],
-  ['Always online', 'Foreground service + battery optimisation exemption', 'push link'],
+type PermKey = keyof NonNullable<DeviceInfo['permissions']>;
+
+const PERMISSIONS: Array<{ name: string; perm: string; rpc: string; key?: PermKey; open?: string }> = [
+  { name: 'Remote control', perm: 'AccessibilityService', rpc: 'input.tap / swipe / text / key', key: 'accessibility', open: 'accessibility' },
+  { name: 'Notifications', perm: 'NotificationListenerService', rpc: 'notif.list / reply / dismiss', key: 'notifications', open: 'notification_access' },
+  { name: 'Files', perm: 'MANAGE_EXTERNAL_STORAGE', rpc: 'fs.list / download / upload', key: 'allFiles', open: 'storage' },
+  { name: 'SMS', perm: 'READ_SMS, SEND_SMS', rpc: 'sms.threads / messages / send', key: 'smsRead', open: 'sms' },
+  { name: 'Camera', perm: 'CAMERA + foregroundServiceType=camera', rpc: 'camera.shot', key: 'camera', open: 'camera' },
+  { name: 'Always online', perm: 'Battery optimisation exemption', rpc: 'push link', key: 'battery', open: 'battery' },
+  { name: 'Screen mirror', perm: 'MediaProjection consent (per session)', rpc: 'mirror.start' },
+  { name: 'Clipboard', perm: 'Android 10+ blocks background clipboard read', rpc: 'device.action clipboard.*' },
 ];
 
 export function Settings({
@@ -83,16 +85,38 @@ export function Settings({
         </Card>
 
         <Card title="Device permissions">
-          {PERMISSIONS.map(([name, perm, rpc]) => (
-            <div className="perm ok" key={name} style={{ marginBottom: 7 }}>
-              <Icon name="check" size={14} />
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 550 }}>{name}</div>
-                <div className="faint" style={{ fontSize: 11 }}>{perm}</div>
+          {PERMISSIONS.map((p) => {
+            const state = p.key ? device?.permissions?.[p.key] : undefined;
+            const denied = state === false;
+            const target = p.open;
+            return (
+              <div className={`perm${denied ? '' : ' ok'}`} key={p.name} style={{ marginBottom: 7 }}>
+                <Icon name={denied ? 'warning' : 'check'} size={14} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 550 }}>{p.name}</div>
+                  <div className="faint" style={{ fontSize: 11 }}>{p.perm}</div>
+                </div>
+                {denied && target ? (
+                  <button
+                    className="btn btn-sm"
+                    style={{ marginLeft: 'auto' }}
+                    onClick={async () => {
+                      try {
+                        await link.request('device.permission', { permission: target });
+                        toast('settings opened on the phone', 'ok');
+                      } catch (e: any) {
+                        toast(e?.message || 'open Airlock → Permissions on the phone', 'warn');
+                      }
+                    }}
+                  >
+                    grant
+                  </button>
+                ) : (
+                  <span className="mono faint" style={{ marginLeft: 'auto', fontSize: 10.5, textAlign: 'right' }}>{p.rpc}</span>
+                )}
               </div>
-              <span className="mono faint" style={{ marginLeft: 'auto', fontSize: 10.5, textAlign: 'right' }}>{rpc}</span>
-            </div>
-          ))}
+            );
+          })}
           <p className="faint" style={{ fontSize: 11.5, marginBottom: 0 }}>
             Android 14 requires a visible foreground-service notification for screen capture,
             camera and microphone. Airlock surfaces that instead of hiding it.
@@ -164,7 +188,7 @@ export function Settings({
             for free-tier hosting. It shares no code, assets or protocol with AirDroid.
             Do not use it to access devices you do not own.
           </p>
-          <div className="kv"><span>Dashboard</span><span>1.0.0</span></div>
+          <div className="kv"><span>Dashboard</span><span>1.0.1</span></div>
           <div className="kv"><span>Protocol</span><span>1</span></div>
           <div className="kv"><span>License</span><span>MIT</span></div>
           <div className="row mt-16">

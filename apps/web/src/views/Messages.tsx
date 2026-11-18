@@ -18,7 +18,7 @@ export function Messages({ link, toast }: { link: Link; toast: (t: string, tone?
 
   async function loadThreads() {
     try {
-      const res = await link.request<any>('sms.threads');
+      const res = await link.request<any>('sms.threads', {}, 45000);
       const list: Thread[] = res.threads || [];
       setThreads(list);
       if (!active && list.length) openThread(list[0]);
@@ -32,7 +32,7 @@ export function Messages({ link, toast }: { link: Link; toast: (t: string, tone?
   async function openThread(t: Thread) {
     setActive(t);
     try {
-      const res = await link.request<any>('sms.messages', { threadId: t.id });
+      const res = await link.request<any>('sms.messages', { threadId: t.id }, 45000);
       setMessages(res.messages || []);
       setThreads((list) => list.map((x) => (x.id === t.id ? { ...x, unread: 0 } : x)));
     } catch (e: any) {
@@ -61,7 +61,7 @@ export function Messages({ link, toast }: { link: Link; toast: (t: string, tone?
     if (!body.trim() || !active) return;
     setSending(true);
     try {
-      const res = await link.request<any>('sms.send', { threadId: active.id, to: active.address, body: body.trim() });
+      const res = await link.request<any>('sms.send', { threadId: active.id, to: active.address, body: body.trim() }, 45000);
       setMessages((m) => [...m, res.message]);
       setBody('');
       setThreads((list) => list.map((t) => (t.id === active.id ? { ...t, preview: res.message.body, ts: res.message.ts } : t)));

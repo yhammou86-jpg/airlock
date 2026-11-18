@@ -9,7 +9,6 @@ import android.os.Bundle
 import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import android.widget.Toast
 
 /**
  * Gesture injection without root. This is the accessibility-service equivalent
@@ -53,10 +52,7 @@ class KeyAccessibilityService : AccessibilityService() {
 
     /** Replace the focused field's contents (works with any IME). */
     fun type(text: String): Boolean {
-        val node = rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: run {
-            Toast.makeText(this, "No focused text field", Toast.LENGTH_SHORT).show()
-            return false
-        }
+        val node = rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }

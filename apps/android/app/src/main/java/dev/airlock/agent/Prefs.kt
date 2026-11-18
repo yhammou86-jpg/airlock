@@ -39,6 +39,15 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("autostart", false)
         set(value) = sp.edit().putBoolean("autostart", value).apply()
 
+    /**
+     * Silent mode: keep remote actions off the phone's UI (volume panel,
+     * accessibility toasts). Foreground-service notifications stay because
+     * Android requires them for camera and screen capture.
+     */
+    var silent: Boolean
+        get() = sp.getBoolean("silent", true)
+        set(value) = sp.edit().putBoolean("silent", value).apply()
+
     fun rotateCode(): String {
         val code = "%06d".format(random.nextInt(1_000_000))
         lanCode = code

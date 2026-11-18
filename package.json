@@ -1,7 +1,7 @@
 {
   "name": "airlock",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Airlock — open, self-hostable AirDroid alternative: Android device agent + browser dashboard",
   "workspaces": [

@@ -68,7 +68,12 @@ Failures keep the same shape with `"ok": false` and
 `event:sms`. Events have no `id` and are fire-and-forget.
 
 Error codes: `bad_code`, `unauthorized`, `unknown_type`, `handler_error`,
-`permission`, `bad_request`.
+`permission`, `timeout`, `bad_request`.
+
+Handlers are single-flight per request with a watchdog: 25 seconds by default,
+15 minutes for `fs.download`. A handler that hangs or dies returns `timeout` or
+`handler_error` with a message instead of leaving the client to time out. A
+missing permission returns `permission` with the setting to grant.
 
 ### hello
 
@@ -77,10 +82,18 @@ Sent by the device on attach (and re-sent on `auth`):
 ```json
 { "type": "hello", "data": {
   "device": { "id": "demo-3f8a1c", "name": "Pixel 8", "model": "Pixel 8",
-              "android": "14", "agent": "airlock-android/1.0.0",
+              "android": "14", "agent": "airlock-android/1.0.1",
               "ip": "192.168.1.24", "port": 8787 },
-  "capabilities": ["device.stats", "fs.list", "mirror.start", "..."] } }
+  "capabilities": ["device.stats", "fs.list", "mirror.start", "..."],
+  "permissions": { "camera": true, "smsRead": false, "smsSend": false,
+                   "notifications": true, "accessibility": false,
+                   "allFiles": true, "battery": false },
+  "silent": true } }
 ```
+
+`permissions` is the phone's live grant state and `silent` is its UI policy.
+Both are re-sent whenever the phone returns to the Airlock app, so the dashboard
+can turn missing grants into actionable buttons.
 
 `capabilities` is advisory: clients should disable controls missing from it.
 
@@ -112,14 +125,15 @@ the browser never needs to know the phone's pixel size.
 | --- | --- | --- |
 | `device.stats` | `{}` | same shape as `event:stats` |
 | `device.action` | `{ action, value? }` | `{ action, ok }` or `{ text }` |
-| `fs.list` | `{ path }` | `{ path, entries[] }` |
+| `device.permission` | `{ permission }` | `{ opened }` — opens the matching Settings screen |
+| `fs.list` | `{ path }` | `{ path, entries[], allFiles, root }` |
 | `fs.mkdir` | `{ path, name }` | `{ created }` |
 | `fs.rename` | `{ path, name, newName }` | `{ path }` |
 | `fs.delete` | `{ paths: [] }` | `{ deleted }` |
 | `fs.upload.begin` | `{ path, name, size, sha256 }` | `{ uploadId, path }` |
 | `fs.upload.done` | `{ uploadId, sha256 }` | `{ path, size, sha256, ok }` |
 | `fs.download` | `{ path }` | `{ name, size, sha256 }` after binary frames |
-| `mirror.start` | `{ fps, quality, maxWidth }` | `{ fps, quality }` |
+| `mirror.start` | `{ fps, quality, maxWidth }` | `{ fps, quality, control, silent }` |
 | `mirror.stop` | `{}` | `{ ok }` |
 | `input.tap` | `{ x, y }` | `{ tapped }` |
 | `input.swipe` | `{ x1, y1, x2, y2, ms }` | `{ swiped }` |
@@ -132,9 +146,16 @@ the browser never needs to know the phone's pixel size.
 | `notif.list` | `{}` | `{ notifications[] }` |
 | `notif.dismiss` | `{ id }` | `{ dismissed }` |
 | `notif.reply` | `{ id, text }` | `{ sent }` |
-| `camera.shot` | `{ lens: "back"\|"front" }` | `{ lens, ts, bytes }` + binary frame |
+| `camera.shot` | `{ lens: "back"\|"front" }` | `{ lens, ts, width, height, bytes }` then one binary frame |
 | `apps.list` | `{}` | `{ apps[] }` |
 | `apps.launch` | `{ pkg }` | `{ launched }` |
+
+`camera.shot` always sends the JSON reply first and the JPEG immediately after,
+so the request that produced the image is settled before the large frame is
+queued. The Android agent caps the JPEG at 1440 px on the long edge and rejects
+overlapping captures with `handler_error`. Mirror frames are best-effort: the
+agent drops them while its socket backlog exceeds 512 KB rather than delaying
+request/response traffic.
 
 File entry:
 

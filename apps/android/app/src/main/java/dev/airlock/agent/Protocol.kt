@@ -127,7 +127,7 @@ object Protocol {
 
     val capabilities: JSONArray = JSONArray(
         listOf(
-            "device.stats", "device.action",
+            "device.stats", "device.action", "device.permission",
             "fs.list", "fs.mkdir", "fs.rename", "fs.delete",
             "fs.upload.begin", "fs.upload.done", "fs.download",
             "mirror.start", "mirror.stop",

@@ -43,14 +43,14 @@ This tree has been compiled for real, not just reviewed:
 | --- | --- |
 | command | `gradle assembleDebug` (Gradle 8.7, JDK 17.0.21, AGP 8.5.2) |
 | output | `app/build/outputs/apk/debug/app-debug.apk` |
-| size | 10,269,963 bytes (9.8 MiB) |
-| package | `dev.airlock.agent` 1.0.0, minSdk 26, targetSdk 34 |
+| size | 10,163,137 bytes (9.7 MiB) |
+| package | `dev.airlock.agent` 1.0.1 (versionCode 2), minSdk 26, targetSdk 34 |
 | signing | debug keystore (`CN=Android Debug`), sideload only |
-| sha256 | `7355caf2b32dfa52e0b6b99b7a071c10ea51c3a8a0ab21f915d11d6a7f70e471` |
-| lint | `gradle lintDebug` — 0 errors, 19 informational warnings |
+| sha256 | `253616cd536a09e31636255c2084d45d1c3fb4370c9728c58318035966fcf5cc` |
+| lint | `gradle lintDebug` — 0 errors, 20 informational warnings |
 
 A copy is published with the dashboard at
-<https://airlock-rho.vercel.app/airlock-1.0.0-debug.apk>.
+<https://airlock-rho.vercel.app/airlock-1.0.1-debug.apk>.
 
 The repo intentionally does not commit `gradle-wrapper.jar`; generate it once
 with `gradle wrapper --gradle-version 8.7` or let Android Studio create it.
@@ -58,6 +58,36 @@ with `gradle wrapper --gradle-version 8.7` or let Android Studio create it.
 The APK is compile-verified only: this machine had no emulator or USB device
 attached, so runtime behaviour (MediaProjection, accessibility injection, SMS)
 is untested. Test those on hardware before relying on them.
+
+### Reliability and silent mode
+
+The 1.0.1 build fixes the “everything times out” failure mode on mobile links:
+
+- `camera.shot` is single-flight, downsizes to a 1440 px JPEG (quality 72) and
+  sends the JSON reply **before** the image bytes, so a photo can never sit in
+  front of other replies in the socket queue.
+- Every RPC has a watchdog (25 s, downloads 15 min). If a handler dies or hangs,
+  the dashboard gets `timeout` / `handler_error` with the real reason instead of
+  silence. Handler failures are caught as `Throwable`, so coroutine crashes no
+  longer look like network timeouts.
+- Mirror frames are dropped while the socket backlog is above 512 KB, and file
+  downloads pause when the queue is above 1.5 MB.
+- SMS, notification, camera and storage handlers check permissions first and
+  return `permission` errors that say exactly which row to grant.
+- **Silent mode** (on by default in the phone app) suppresses volume-panel pops
+  and accessibility toasts. Android still requires the foreground-service
+  notification for camera and screen capture; that one cannot be hidden.
+- The dashboard no longer polls the camera on a fixed timer: it waits for each
+  frame before asking for the next one and stops “live” after three failures.
+
+If SMS still returns a permission error after tapping **grant**, some Android 16
+builds treat `READ_SMS`/`SEND_SMS` as restricted for sideloaded apps. Grant them
+over USB once:
+
+```bash
+adb shell pm grant dev.airlock.agent android.permission.READ_SMS
+adb shell pm grant dev.airlock.agent android.permission.SEND_SMS
+```
 
 
 ## First run

@@ -29,6 +29,16 @@ export type DeviceInfo = {
   ip?: string;
   port?: number;
   capabilities?: string[];
+  permissions?: {
+    camera?: boolean;
+    smsRead?: boolean;
+    smsSend?: boolean;
+    notifications?: boolean;
+    accessibility?: boolean;
+    allFiles?: boolean;
+    battery?: boolean;
+  };
+  silent?: boolean;
 };
 
 export type Stats = {
@@ -50,6 +60,7 @@ export class Link {
   ws: WebSocket | null = null;
   status: LinkStatus = 'idle';
   detail = '';
+  device: DeviceInfo | null = null;
   onStatus?: (s: LinkStatus, detail: string) => void;
   onDevice?: (d: DeviceInfo) => void;
   onStats?: (s: Stats) => void;
@@ -120,7 +131,14 @@ export class Link {
         let msg: any;
         try { msg = JSON.parse(ev.data); } catch { return; }
         if (msg.type === 'hello') {
-          this.onDevice?.({ ...(msg.data?.device || {}), capabilities: msg.data?.capabilities });
+          const info: DeviceInfo = {
+            ...(msg.data?.device || {}),
+            capabilities: msg.data?.capabilities,
+            permissions: msg.data?.permissions,
+            silent: msg.data?.silent,
+          };
+          this.device = info;
+          this.onDevice?.(info);
           return;
         }
         if (msg.type === 'event:stats') { this.onStats?.(msg.data || {}); this.emit('stats', msg.data || {}); return; }
@@ -166,12 +184,13 @@ export class Link {
     clearTimeout(this.timer);
     try { this.ws?.close(); } catch {}
     this.ws = null;
+    this.device = null;
     this.pending.forEach((p) => { clearTimeout(p.timer); p.reject(new Error('disconnected')); });
     this.pending.clear();
     this.setStatus('idle');
   }
 
-  request<T = any>(type: string, data: any = {}, timeout = 20000): Promise<T> {
+  request<T = any>(type: string, data: any = {}, timeout = 30000): Promise<T> {
     const ws = this.ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) return Promise.reject(new Error('not connected'));
     const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -216,7 +235,7 @@ export class Link {
       onProgress?.(received);
     });
     try {
-      const res = await this.request<any>('fs.download', { path }, 180000);
+      const res = await this.request<any>('fs.download', { path }, 600000);
       return { blob: new Blob(chunks as any), name: res.name, size: res.size };
     } finally {
       off();

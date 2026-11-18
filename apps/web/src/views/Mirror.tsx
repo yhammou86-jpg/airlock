@@ -37,6 +37,7 @@ function useFrames(link: Link, kind: number) {
 export function Mirror({ link, toast }: { link: Link; toast: (t: string, tone?: Toast['tone']) => void }) {
   const { frame, fps } = useFrames(link, 1);
   const [streaming, setStreaming] = useState(false);
+  const [control, setControl] = useState<boolean | null>(link.device?.permissions?.accessibility ?? null);
   const [rate, setRate] = useState(10);
   const [gesture, setGesture] = useState<'tap' | 'swipe' | 'longpress'>('tap');
   const [text, setText] = useState('');
@@ -52,8 +53,9 @@ export function Mirror({ link, toast }: { link: Link; toast: (t: string, tone?: 
 
   const start = useCallback(async () => {
     try {
-      const res = await link.request('mirror.start', { fps: rate, quality: 70, maxWidth: 720 });
+      const res = await link.request<any>('mirror.start', { fps: rate, quality: 70, maxWidth: 720 });
       setStreaming(true);
+      if (typeof res.control === 'boolean') setControl(res.control);
       toast(`mirroring at ${res.fps || rate} fps`, 'ok');
     } catch (e: any) {
       toast(e?.message || 'could not start mirror', 'bad');
@@ -268,11 +270,30 @@ export function Mirror({ link, toast }: { link: Link; toast: (t: string, tone?: 
           </Card>
 
           <div className="warn-strip">
-            <Icon name="warning" size={15} />
+            <Icon name={control === false ? 'warning' : 'shield'} size={15} />
             <span>
-              Real remote control needs an accessibility service on the phone (or the
-              Airlock add-on). Without it the mirror is view-only and input is ignored.
+              {control === false
+                ? 'View-only: the accessibility service is off, so taps, swipes and keys are ignored by the phone.'
+                : control === true
+                  ? 'Touch, keyboard and hardware keys are injected through the Airlock accessibility service.'
+                  : 'Enable the Airlock accessibility service on the phone to unlock remote control.'}
             </span>
+            {control === false && (
+              <button
+                className="btn btn-sm"
+                style={{ marginLeft: 'auto' }}
+                onClick={async () => {
+                  try {
+                    await link.request('device.permission', { permission: 'accessibility' });
+                    toast('accessibility settings opened on the phone', 'ok');
+                  } catch (e: any) {
+                    toast(e?.message || 'open Airlock → Permissions on the phone', 'warn');
+                  }
+                }}
+              >
+                Enable
+              </button>
+            )}
           </div>
         </div>
       </div>

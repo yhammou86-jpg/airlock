@@ -111,6 +111,13 @@ class CloudLink(
             socket.send(ByteString.of(*bytes))
         }
 
+        override val backlog: Int
+            get() = try {
+                socket.queueSize().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            } catch (_: Throwable) {
+                0
+            }
+
         override fun close(code: Int, reason: String) {
             socket.close(code, reason)
         }

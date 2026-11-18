@@ -18,9 +18,12 @@ import java.security.MessageDigest
  */
 class FsStore(private val context: Context) {
 
+    val allFiles: Boolean
+        get() = Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager()
+
     val root: File
         get() {
-            val base = if (Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()) {
+            val base = if (allFiles) {
                 Environment.getExternalStorageDirectory()
             } else {
                 context.getExternalFilesDir(null) ?: context.filesDir

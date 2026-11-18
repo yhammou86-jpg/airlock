@@ -41,4 +41,11 @@ interface Peer {
     fun sendText(text: String)
     fun sendBinary(bytes: ByteArray)
     fun close(code: Int = 1000, reason: String = "bye")
+
+    /**
+     * Bytes still queued in the transport, best effort. Media producers use it
+     * to shed frames instead of building an unbounded backlog that starves
+     * request/response traffic on a slow mobile uplink.
+     */
+    val backlog: Int get() = 0
 }

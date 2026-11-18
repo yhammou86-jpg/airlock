@@ -16,13 +16,15 @@ export function Files({ link, toast }: { link: Link; toast: (t: string, tone?: T
   const [drag, setDrag] = useState(false);
   const [modal, setModal] = useState<null | { kind: 'mkdir' | 'rename' | 'delete' | 'preview'; target?: Entry; value?: string }>(null);
   const [preview, setPreview] = useState<{ url: string; name: string } | null>(null);
+  const [scope, setScope] = useState<{ allFiles: boolean; root: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async (p = path) => {
     setLoading(true);
     try {
-      const res = await link.request<any>('fs.list', { path: p });
+      const res = await link.request<any>('fs.list', { path: p }, 45000);
       setEntries(res.entries || []);
+      if (typeof res.allFiles === 'boolean') setScope({ allFiles: res.allFiles, root: res.root || '/' });
     } catch (e: any) {
       toast(e?.message || 'could not list folder', 'bad');
       setEntries([]);
@@ -130,6 +132,30 @@ export function Files({ link, toast }: { link: Link; toast: (t: string, tone?: T
           onChange={(e) => { const f = Array.from(e.target.files || []); e.currentTarget.value = ''; if (f.length) uploadFiles(f); }}
         />
       </div>
+
+      {scope && !scope.allFiles && (
+        <div className="warn-strip" style={{ marginBottom: 14 }}>
+          <Icon name="warning" size={15} />
+          <span>
+            Browsing Airlock's private folder (<code>{scope.root}</code>). To browse Downloads, DCIM and the
+            rest of the phone, grant “all files access” on the device and reopen this page.
+          </span>
+          <button
+            className="btn btn-sm"
+            style={{ marginLeft: 'auto' }}
+            onClick={async () => {
+              try {
+                await link.request('device.permission', { permission: 'storage' });
+                toast('settings opened on the phone', 'ok');
+              } catch (e: any) {
+                toast(e?.message || 'open Settings → Permissions on the phone', 'warn');
+              }
+            }}
+          >
+            Grant
+          </button>
+        </div>
+      )}
 
       <div className="files-bar">
         <div className="crumbs">

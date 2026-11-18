@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -100,11 +101,15 @@ private fun AgentScreen() {
     var roomCode by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var silent by remember { mutableStateOf(prefs.silent) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) tick++
+            if (event == Lifecycle.Event.ON_RESUME) {
+                tick++
+                DeviceService.core?.broadcastHello()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -123,7 +128,8 @@ private fun AgentScreen() {
     val listeners = remember(tick) { notificationAccessEnabled(context) }
     val camera = remember(tick) { granted(context, Manifest.permission.CAMERA) }
     val sms = remember(tick) { granted(context, Manifest.permission.READ_SMS) && granted(context, Manifest.permission.SEND_SMS) }
-    val files = remember(tick) { allFilesAccess(context) }
+    val files = remember(tick) { allFilesAccess() }
+    val battery = remember(tick) { batteryUnrestricted(context) }
 
     Column(
         Modifier
@@ -335,6 +341,35 @@ private fun AgentScreen() {
                     )
                 }
             }
+            PermissionRow("Battery unrestricted", battery) {
+                context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            }
+        }
+
+        // ------------------------------------------------------------ behaviour
+        PanelCard {
+            SectionTitle("Behaviour")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Silent mode", color = TextMain, fontSize = 13.sp)
+                    Text(
+                        "Remote volume changes stay off this screen and input errors are reported to the dashboard instead of a toast.",
+                        color = TextDim,
+                        fontSize = 11.sp,
+                    )
+                }
+                TextButton(onClick = {
+                    prefs.silent = !silent
+                    silent = prefs.silent
+                }) { Text(if (silent) "on" else "off", color = if (silent) Ok else TextDim) }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Android still shows the foreground-service notification required for camera and screen capture. " +
+                    "Open this screen and tap “Allow capture” once per session for mirroring.",
+                color = TextDim,
+                fontSize = 11.sp,
+            )
         }
 
         Text(
@@ -391,8 +426,13 @@ private fun notificationAccessEnabled(context: Context): Boolean {
     return flat.split(':').any { ComponentName.unflattenFromString(it)?.packageName == context.packageName }
 }
 
-private fun allFilesAccess(context: Context): Boolean =
+private fun allFilesAccess(): Boolean =
     if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager() else true
+
+private fun batteryUnrestricted(context: Context): Boolean {
+    val power = context.getSystemService(PowerManager::class.java) ?: return false
+    return power.isIgnoringBatteryOptimizations(context.packageName)
+}
 
 /** POST /api/pair on the relay. Runs on Dispatchers.IO. */
 private fun createRoom(relay: String, name: String): JSONObject {

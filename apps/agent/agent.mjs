@@ -356,7 +356,7 @@ function startMirror(session, opts = {}) {
     mirrorTimer = setInterval(mirrorTick, Math.round(1000 / fps));
     mirrorTick();
   }
-  return { fps, codec: 'svg', width: 400, height: 860 };
+  return { fps, codec: 'svg', width: 400, height: 860, control: true, silent: true };
 }
 
 function stopMirror(session) {
@@ -383,7 +383,7 @@ const handlers = {
 
   async 'fs.list'(d) {
     const p = d.path || '/';
-    return { path: p, entries: await listDir(p) };
+    return { path: p, entries: await listDir(p), allFiles: true, root: '/' };
   },
 
   async 'fs.mkdir'(d) {
@@ -524,7 +524,11 @@ const handlers = {
   'camera.shot'(d, session) {
     const svg = svgCamera(d.lens || 'back');
     session.ws.send(encodeFrame({ kind: FrameKind.CAMERA, codec: Codec.SVG }, Buffer.from(svg, 'utf8')), { binary: true });
-    return { lens: d.lens || 'back', ts: Date.now(), size: 4032 * 3024 };
+    return { lens: d.lens || 'back', ts: Date.now(), width: 400, height: 860, bytes: Buffer.byteLength(svg) };
+  },
+
+  'device.permission'(d) {
+    return { opened: String(d.permission || 'demo'), demo: true };
   },
 
   'device.action'(d) {
@@ -596,8 +600,10 @@ function attach(ws, { remote = false } = {}) {
         send(session, {
           v: 1, type: 'hello', ts: Date.now(),
           data: {
-            device: { id: DEVICE_ID, name: NAME, model: 'Airlock Reference', android: '14', agent: '1.0.0', ip: ipAddress(), port: PORT },
+            device: { id: DEVICE_ID, name: NAME, model: 'Airlock Reference', android: '14', agent: '1.0.1', ip: ipAddress(), port: PORT },
             capabilities: Object.keys(handlers),
+            permissions: { camera: true, smsRead: true, smsSend: true, notifications: true, accessibility: true, allFiles: true, battery: true },
+            silent: true,
           },
         });
         pushStats();
@@ -676,8 +682,10 @@ function connectCloud() {
     send({ ws }, {
       v: 1, type: 'hello', ts: Date.now(),
       data: {
-        device: { id: DEVICE_ID, name: NAME, model: 'Airlock Reference', android: '14', agent: '1.0.0', ip: ipAddress(), port: PORT },
+        device: { id: DEVICE_ID, name: NAME, model: 'Airlock Reference', android: '14', agent: '1.0.1', ip: ipAddress(), port: PORT },
         capabilities: Object.keys(handlers),
+        permissions: { camera: true, smsRead: true, smsSend: true, notifications: true, accessibility: true, allFiles: true, battery: true },
+        silent: true,
       },
     });
     pushStats();

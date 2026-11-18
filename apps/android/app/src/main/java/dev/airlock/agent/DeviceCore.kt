@@ -1,29 +1,33 @@
 package dev.airlock.agent
 
+import android.Manifest
 import android.accessibilityservice.AccessibilityService
-import android.app.ActivityManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -93,16 +97,37 @@ class DeviceCore(
             .put("name", prefs.deviceName)
             .put("model", Build.MODEL)
             .put("android", Build.VERSION.RELEASE)
-            .put("agent", "airlock-android/1.0.0")
+            .put("agent", "airlock-android/1.0.1")
             .put("ip", DeviceStats.lanIp() ?: JSONObject.NULL)
             .put("port", DeviceService.LAN_PORT)
         return Protocol.envelope("hello", JSONObject()
             .put("device", device)
-            .put("capabilities", Protocol.capabilities))
+            .put("capabilities", Protocol.capabilities)
+            .put("permissions", permissions())
+            .put("silent", prefs.silent))
     }
+
+    /**
+     * A snapshot of what the phone actually allows right now. The dashboard uses
+     * this to show actionable banners instead of waiting for a timeout.
+     */
+    fun permissions(): JSONObject = JSONObject()
+        .put("camera", granted(Manifest.permission.CAMERA))
+        .put("smsRead", granted(Manifest.permission.READ_SMS))
+        .put("smsSend", granted(Manifest.permission.SEND_SMS))
+        .put("notifications", notificationAccessEnabled())
+        .put("accessibility", KeyAccessibilityService.isEnabled(context))
+        .put("allFiles", Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager())
+        .put("battery", power?.isIgnoringBatteryOptimizations(context.packageName) ?: false)
 
     fun broadcastEvent(type: String, data: JSONObject) {
         val payload = Protocol.event(type, data).toString()
+        for (p in peers) if (p.state.authed) p.sendText(payload)
+    }
+
+    /** Re-announce device details after a permission changes. */
+    fun broadcastHello() {
+        val payload = hello().toString()
         for (p in peers) if (p.state.authed) p.sendText(payload)
     }
 
@@ -172,19 +197,104 @@ class DeviceCore(
         }
 
         val data = req.optJSONObject("data") ?: JSONObject()
+        val started = System.currentTimeMillis()
         try {
-            val result = dispatch(peer, type, data)
+            if (type == "camera.shot") {
+                val shot = cameraShot(data)
+                // Reply first: a tiny JSON envelope must never queue behind a
+                // multi-hundred-KB JPEG on a slow mobile uplink.
+                peer.sendText(
+                    Protocol.response(
+                        req,
+                        JSONObject()
+                            .put("lens", data.optString("lens", "back"))
+                            .put("width", shot.width)
+                            .put("height", shot.height)
+                            .put("bytes", shot.bytes.size)
+                            .put("ts", System.currentTimeMillis()),
+                    ).toString()
+                )
+                peer.sendBinary(
+                    Protocol.encodeFrame(Protocol.Kind.CAMERA, Protocol.Codec.JPEG, payload = shot.bytes)
+                )
+                log("info", "camera snapshot ${shot.width}×${shot.height} · ${shot.bytes.size} B")
+                return
+            }
+
+            val limit = when (type) {
+                "fs.download" -> DOWNLOAD_TIMEOUT_MS
+                "fs.upload.done" -> 120_000L
+                else -> HANDLER_TIMEOUT_MS
+            }
+            val result = withTimeout(limit) { dispatch(peer, type, data) }
             peer.sendText(Protocol.response(req, result).toString())
+            val elapsed = System.currentTimeMillis() - started
+            if (elapsed > SLOW_COMMAND_MS) log("warn", "$type took ${elapsed} ms")
+        } catch (e: TimeoutCancellationException) {
+            reject(
+                peer, req, type, "timeout",
+                "$type did not finish on the phone in time — check the device screen and Airlock permissions",
+            )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: SecurityException) {
-            peer.sendText(Protocol.failure(req, "permission", e.message ?: "permission denied").toString())
-        } catch (e: Exception) {
-            peer.sendText(Protocol.failure(req, "handler_error", e.message ?: e.toString()).toString())
+            reject(peer, req, type, "permission", e.message ?: "permission denied on the phone")
+        } catch (e: Throwable) {
+            // Deliberately Throwable: OOM, linkage and camera-driver errors used
+            // to kill the coroutine silently and show up as a dashboard timeout.
+            reject(peer, req, type, "handler_error", describe(e))
+        }
+    }
+
+    private fun reject(peer: Peer, req: JSONObject, type: String, code: String, message: String) {
+        peer.sendText(Protocol.failure(req, code, message).toString())
+        log("warn", "$type failed: $message")
+    }
+
+    private fun describe(e: Throwable): String =
+        e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
+
+    private fun granted(permission: String): Boolean =
+        context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+
+    private fun requireSms(read: Boolean) {
+        if (read) {
+            if (!granted(Manifest.permission.READ_SMS)) {
+                throw SecurityException(
+                    "SMS read permission is not granted — open Airlock on the phone and tap grant next to “SMS read + send”",
+                )
+            }
+        } else if (!granted(Manifest.permission.SEND_SMS)) {
+            throw SecurityException(
+                "SMS send permission is not granted — open Airlock on the phone and tap grant next to “SMS read + send”",
+            )
+        }
+    }
+
+    private fun notificationAccessEnabled(): Boolean {
+        val flat = Settings.Secure.getString(
+            context.contentResolver,
+            "enabled_notification_listeners",
+        ) ?: return false
+        return flat.split(':').any {
+            android.content.ComponentName.unflattenFromString(it)?.packageName == context.packageName
+        }
+    }
+
+    private fun requireNotifAccess() {
+        if (NotifListener.instance == null && !notificationAccessEnabled()) {
+            throw SecurityException(
+                "notification access is off — open Airlock on the phone and enable “Notification access”",
+            )
         }
     }
 
     private suspend fun dispatch(peer: Peer, type: String, d: JSONObject): JSONObject = when (type) {
         "device.stats" -> stats.snapshot()
+        "device.permission" -> permission(d)
         "fs.list" -> fs.list(d.optString("path", "/"))
+            .put("allFiles", fs.allFiles)
+            .put("root", fs.wirePath(fs.root))
         "fs.mkdir" -> fs.mkdir(d.optString("path", "/"), d.optString("name"))
         "fs.rename" -> fs.rename(d.optString("path", "/"), d.optString("name"), d.optString("newName"))
         "fs.delete" -> fs.delete(d.optJSONArray("paths")?.toStringList() ?: emptyList())
@@ -198,13 +308,31 @@ class DeviceCore(
         "input.longpress" -> longPress(d)
         "input.key" -> key(d)
         "input.text" -> text(d)
-        "sms.threads" -> sms.threads()
-        "sms.messages" -> sms.messages(d.optString("threadId"))
-        "sms.send" -> sms.send(d.optString("to"), d.optString("body"))
-        "notif.list" -> JSONObject().put("notifications", NotifStore.list())
-        "notif.dismiss" -> JSONObject().put("dismissed", NotifListener.instance?.dismiss(d.optString("id")) ?: false)
-        "notif.reply" -> JSONObject().put("sent", NotifListener.instance?.reply(d.optString("id"), d.optString("text")) ?: false)
-        "camera.shot" -> cameraShot(peer, d)
+        "sms.threads" -> {
+            requireSms(read = true)
+            sms.threads()
+        }
+        "sms.messages" -> {
+            requireSms(read = true)
+            sms.messages(d.optString("threadId"))
+        }
+        "sms.send" -> {
+            requireSms(read = false)
+            sms.send(d.optString("to"), d.optString("body"))
+        }
+        "notif.list" -> {
+            requireNotifAccess()
+            JSONObject().put("notifications", NotifStore.list())
+        }
+        "notif.dismiss" -> {
+            requireNotifAccess()
+            JSONObject().put("dismissed", NotifListener.instance?.dismiss(d.optString("id")) ?: false)
+        }
+        "notif.reply" -> {
+            requireNotifAccess()
+            JSONObject().put("sent", NotifListener.instance?.reply(d.optString("id"), d.optString("text")) ?: false)
+        }
+        "camera.shot" -> throw IllegalStateException("camera handled by the reply-first path")
         "apps.list" -> apps()
         "apps.launch" -> launch(d)
         "device.action" -> action(d)
@@ -262,7 +390,7 @@ class DeviceCore(
         }
     }
 
-    private fun download(peer: Peer, d: JSONObject): JSONObject {
+    private suspend fun download(peer: Peer, d: JSONObject): JSONObject {
         val file = fs.resolve(d.optString("path"))
         if (file.isDirectory) throw IllegalArgumentException("is a directory")
         if (!file.exists()) throw IllegalArgumentException("no such file")
@@ -273,6 +401,13 @@ class DeviceCore(
                 if (n <= 0) break
                 val chunk = if (n == buffer.size) buffer.copyOf() else buffer.copyOf(n)
                 peer.sendBinary(Protocol.encodeFrame(Protocol.Kind.DOWNLOAD, payload = chunk))
+                // Do not let a large download fill the socket queue and starve
+                // the JSON replies that follow it.
+                var waits = 0
+                while (peer.backlog > SEND_BACKLOG_LIMIT && waits < 400) {
+                    delay(5)
+                    waits++
+                }
             }
         }
         return JSONObject()
@@ -291,12 +426,27 @@ class DeviceCore(
         val maxWidth = d.optInt("maxWidth", 720)
         val started = screen.start(fps, quality, maxWidth) { jpeg, _, _ ->
             val frame = Protocol.encodeFrame(Protocol.Kind.MIRROR, Protocol.Codec.JPEG, payload = jpeg)
-            for (p in peers) if (p.state.authed && p.state.mirroring) p.sendBinary(frame)
+            for (p in peers) {
+                if (!p.state.authed || !p.state.mirroring) continue
+                // Shed mirror frames on a congested uplink; stale frames are
+                // worthless and must never block command replies.
+                if (p.backlog > MIRROR_BACKLOG_LIMIT) continue
+                p.sendBinary(frame)
+            }
         }
         if (!started) throw IllegalStateException("could not start capture")
         peer.state.mirroring = true
         log("info", "mirror started at $fps fps")
-        return JSONObject().put("fps", fps).put("quality", quality)
+        val control = KeyAccessibilityService.isEnabled(context)
+        if (!control) {
+            log("warn", "mirror is view-only: accessibility service is off")
+        }
+        return JSONObject()
+            .put("fps", fps)
+            .put("quality", quality)
+            .put("maxWidth", maxWidth)
+            .put("control", control)
+            .put("silent", prefs.silent)
     }
 
     private fun stopMirrorFor(peer: Peer): JSONObject {
@@ -366,22 +516,63 @@ class DeviceCore(
     }
 
     private fun text(d: JSONObject): JSONObject {
-        val ok = service().type(d.optString("text"))
+        val value = d.optString("text")
+        val ok = service().type(value)
+        if (!ok) {
+            throw IllegalStateException("no focused text field on the phone — tap a text box in the mirror first")
+        }
         log("info", "text input")
-        return JSONObject().put("ok", ok)
+        return JSONObject().put("ok", true)
     }
 
     // ---------------------------------------------------------------- camera
-    private suspend fun cameraShot(peer: Peer, d: JSONObject): JSONObject {
-        if (context.checkSelfPermission(android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            throw SecurityException("grant camera permission in Airlock")
+    private suspend fun cameraShot(d: JSONObject): CameraController.Shot {
+        if (!granted(Manifest.permission.CAMERA)) {
+            throw SecurityException(
+                "camera permission is not granted — open Airlock on the phone and tap grant next to “Camera snapshots”",
+            )
         }
         val lens = d.optString("lens", "back")
         DeviceService.instance?.promoteCamera()
-        val bytes = camera.snapshot(lens)
-        peer.sendBinary(Protocol.encodeFrame(Protocol.Kind.CAMERA, Protocol.Codec.JPEG, payload = bytes))
-        log("info", "camera snapshot ($lens)")
-        return JSONObject().put("lens", lens).put("ts", System.currentTimeMillis()).put("bytes", bytes.size)
+        return try {
+            withTimeout(CAMERA_TIMEOUT_MS) { camera.snapshot(lens) }
+        } catch (e: TimeoutCancellationException) {
+            throw IllegalStateException(
+                "camera did not deliver a frame within ${CAMERA_TIMEOUT_MS / 1000}s — close other camera apps and try again",
+            )
+        }
+    }
+
+    private fun permission(d: JSONObject): JSONObject {
+        val what = d.optString("permission")
+        val pkgUri = Uri.parse("package:${context.packageName}")
+        val intent = when (what) {
+            "accessibility" -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            "notification_access" -> Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+            "notifications" -> Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            "storage" -> if (Build.VERSION.SDK_INT >= 30) {
+                Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, pkgUri)
+            } else {
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
+            }
+            "camera", "sms" -> Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
+            "battery" -> Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+            else -> throw IllegalArgumentException("unknown permission $what")
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            context.startActivity(intent)
+            log("info", "opened $what settings on the phone")
+            main.postDelayed({ broadcastHello() }, 1200)
+            JSONObject().put("opened", what)
+        } catch (_: Throwable) {
+            // Android 10+ blocks background activity starts without a visible
+            // app or an overlay grant.
+            throw IllegalStateException(
+                "Android blocked the $what screen — open Airlock on the phone and use the Permissions card",
+            )
+        }
     }
 
     // ---------------------------------------------------------------- apps
@@ -417,13 +608,14 @@ class DeviceCore(
 
     // ---------------------------------------------------------------- actions
     private fun action(d: JSONObject): JSONObject {
+        val ui = if (prefs.silent) 0 else AudioManager.FLAG_SHOW_UI
         when (val a = d.optString("action")) {
-            "volume.up" -> audio?.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
-            "volume.down" -> audio?.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
+            "volume.up" -> audio?.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, ui)
+            "volume.down" -> audio?.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, ui)
             "volume.mute" -> audio?.adjustStreamVolume(
                 AudioManager.STREAM_MUSIC,
                 AudioManager.ADJUST_TOGGLE_MUTE,
-                AudioManager.FLAG_SHOW_UI,
+                ui,
             )
             "media.play" -> mediaKey(KeyEvent.KEYCODE_MEDIA_PLAY)
             "media.pause" -> mediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE)
@@ -501,5 +693,17 @@ class DeviceCore(
 
     companion object {
         private const val TAG = "AirlockCore"
+
+        /** Worst-case wall clock for one RPC before the dashboard gets a real error. */
+        private const val HANDLER_TIMEOUT_MS = 25_000L
+        private const val CAMERA_TIMEOUT_MS = 20_000L
+        private const val DOWNLOAD_TIMEOUT_MS = 15 * 60_000L
+
+        /** Log slow handlers so link congestion is visible in the dashboard. */
+        private const val SLOW_COMMAND_MS = 2_000L
+
+        /** Stop adding to the socket queue once this many bytes are unsent. */
+        private const val SEND_BACKLOG_LIMIT = 1_500_000
+        private const val MIRROR_BACKLOG_LIMIT = 512_000
     }
 }
