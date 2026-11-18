@@ -226,7 +226,7 @@ class DeviceCore(
                 "fs.upload.done" -> 120_000L
                 else -> HANDLER_TIMEOUT_MS
             }
-            val result = withTimeout(limit) { dispatch(peer, type, data) }
+            val result = runWithWatchdog(limit) { dispatch(peer, type, data) }
             peer.sendText(Protocol.response(req, result).toString())
             val elapsed = System.currentTimeMillis() - started
             if (elapsed > SLOW_COMMAND_MS) log("warn", "$type took ${elapsed} ms")
@@ -249,6 +249,29 @@ class DeviceCore(
     private fun reject(peer: Peer, req: JSONObject, type: String, code: String, message: String) {
         peer.sendText(Protocol.failure(req, code, message).toString())
         log("warn", "$type failed: $message")
+    }
+
+    /**
+     * A cooperative `withTimeout` cannot interrupt a handler stuck in a
+     * blocking binder/provider call. Run it on an independent job and race it,
+     * so the dashboard always gets a reply at the deadline even if the worker
+     * thread keeps draining afterwards.
+     */
+    private suspend fun <T> runWithWatchdog(limit: Long, block: suspend () -> T): T {
+        val outcome = kotlinx.coroutines.CompletableDeferred<Result<T>>()
+        val job = scope.launch(Dispatchers.IO) {
+            try {
+                outcome.complete(Result.success(block()))
+            } catch (t: Throwable) {
+                outcome.complete(Result.failure(t))
+            }
+        }
+        try {
+            return withTimeout(limit) { outcome.await() }.getOrThrow()
+        } catch (e: TimeoutCancellationException) {
+            job.cancel()
+            throw e
+        }
     }
 
     private fun describe(e: Throwable): String =

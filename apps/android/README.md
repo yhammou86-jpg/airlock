@@ -43,10 +43,10 @@ This tree has been compiled for real, not just reviewed:
 | --- | --- |
 | command | `gradle assembleDebug` (Gradle 8.7, JDK 17.0.21, AGP 8.5.2) |
 | output | `app/build/outputs/apk/debug/app-debug.apk` |
-| size | 10,163,137 bytes (9.7 MiB) |
+| size | 10,283,746 bytes (9.8 MiB) |
 | package | `dev.airlock.agent` 1.0.1 (versionCode 2), minSdk 26, targetSdk 34 |
 | signing | debug keystore (`CN=Android Debug`), sideload only |
-| sha256 | `253616cd536a09e31636255c2084d45d1c3fb4370c9728c58318035966fcf5cc` |
+| sha256 | `ed820155a9e96dffdd80bc66401a9c748868129ff145fdfadf44c718a0a65ccd` |
 | lint | `gradle lintDebug` — 0 errors, 20 informational warnings |
 
 A copy is published with the dashboard at
