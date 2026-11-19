@@ -17,6 +17,7 @@
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -63,7 +64,12 @@
         <service
             android:name=".DeviceService"
             android:exported="false"
-            android:foregroundServiceType="dataSync|mediaProjection|camera" />
+            android:foregroundServiceType="specialUse|dataSync|mediaProjection|camera">
+            <!-- Android 14+ requires a declared subtype for specialUse. -->
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Paired device link and remote control agent for the Airlock dashboard" />
+        </service>
 
         <service
             android:name=".KeyAccessibilityService"

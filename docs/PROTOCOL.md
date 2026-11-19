@@ -82,7 +82,7 @@ Sent by the device on attach (and re-sent on `auth`):
 ```json
 { "type": "hello", "data": {
   "device": { "id": "demo-3f8a1c", "name": "Pixel 8", "model": "Pixel 8",
-              "android": "14", "agent": "airlock-android/1.0.1",
+              "android": "14", "agent": "airlock-android/1.0.2",
               "ip": "192.168.1.24", "port": 8787 },
   "capabilities": ["device.stats", "fs.list", "mirror.start", "..."],
   "permissions": { "camera": true, "smsRead": false, "smsSend": false,
@@ -181,8 +181,16 @@ Notification: `{ id, app, title, body, ts, canReply }`.
 | `wake` | brief screen wake lock |
 | `lock` | accessibility lock action (Android 9+) |
 | `find` | ring at full volume for 8 s |
+| `silent.on` / `silent.off` / `silent.toggle` | phone UI policy; returns `{ silent }` |
 | `clipboard.get` / `clipboard.set` | `{ text }` |
 | `light`/`dark` (dashboard only) | not sent to the device |
+
+Silent mode is a device-side policy. When on, volume changes pass no
+`FLAG_SHOW_UI`, accessibility failures return an error instead of a toast, the
+foreground-service entry uses minimum importance (no status-bar icon, no sound,
+hidden on the lock screen) and omits the pairing code and IP. Android still
+requires that entry and the per-session MediaProjection approval; neither can be
+removed without root. The camera/microphone privacy indicator is system-owned.
 
 `input.key` accepts `home`, `back`, `recents`, `notifications`, `lock`,
 `backspace`, `enter`. `power` is rejected on unrooted devices.

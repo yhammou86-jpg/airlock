@@ -97,7 +97,7 @@ class DeviceCore(
             .put("name", prefs.deviceName)
             .put("model", Build.MODEL)
             .put("android", Build.VERSION.RELEASE)
-            .put("agent", "airlock-android/1.0.1")
+            .put("agent", "airlock-android/1.0.2")
             .put("ip", DeviceStats.lanIp() ?: JSONObject.NULL)
             .put("port", DeviceService.LAN_PORT)
         return Protocol.envelope("hello", JSONObject()
@@ -649,6 +649,19 @@ class DeviceCore(
                 service().global(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN)
             }
             "find" -> findPhone()
+            "silent.on", "silent.off", "silent.toggle" -> {
+                prefs.silent = when (a) {
+                    "silent.on" -> true
+                    "silent.off" -> false
+                    else -> !prefs.silent
+                }
+                DeviceService.instance?.refreshNotification()
+                broadcastHello()
+                return JSONObject()
+                    .put("action", a)
+                    .put("ok", true)
+                    .put("silent", prefs.silent)
+            }
             "clipboard.get" -> return JSONObject().put("text", clipboardText())
             "clipboard.set" -> {
                 clipboard?.setPrimaryClip(ClipData.newPlainText("Airlock", d.optString("value")))
@@ -690,16 +703,20 @@ class DeviceCore(
     }
 
     private fun findPhone() {
+        val am = audio ?: return
         val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
         val tone = RingtoneManager.getRingtone(context, uri) ?: return
-        audio?.let { am ->
-            am.setStreamVolume(AudioManager.STREAM_RING, am.getStreamMaxVolume(AudioManager.STREAM_RING), 0)
-        }
+        val previous = am.getStreamVolume(AudioManager.STREAM_RING)
+        am.setStreamVolume(AudioManager.STREAM_RING, am.getStreamMaxVolume(AudioManager.STREAM_RING), 0)
         ringtone?.stop()
         ringtone = tone
         tone.play()
-        main.postDelayed({ runCatching { tone.stop() } }, 8_000)
+        // Restore the user's ringer level so "find" does not leave the phone loud.
+        main.postDelayed({
+            runCatching { tone.stop() }
+            runCatching { am.setStreamVolume(AudioManager.STREAM_RING, previous, 0) }
+        }, 8_000)
     }
 
     private fun clipboardText(): String {

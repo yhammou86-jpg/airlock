@@ -59,7 +59,7 @@ class DeviceService : Service(), LifecycleOwner {
         core = DeviceCore(this, prefs, screen, camera!!, scope)
         DeviceService.core = core
 
-        foreground(ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        foreground(linkType())
         keepAwake()
         startLan()
         startCloud()
@@ -89,8 +89,7 @@ class DeviceService : Service(), LifecycleOwner {
                     // Android 11+ requires the foreground-service type to be
                     // mediaProjection *before* getMediaProjection() is called.
                     foreground(
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
-                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+                        linkType() or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
                     )
                     if (screen.setProjection(resultCode, data)) {
                         state.update { it.copy(mirrored = true, error = null) }
@@ -177,8 +176,7 @@ class DeviceService : Service(), LifecycleOwner {
                 android.content.pm.PackageManager.PERMISSION_GRANTED
             ) {
                 foreground(
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                    linkType() or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
                 )
             }
             true
@@ -189,10 +187,25 @@ class DeviceService : Service(), LifecycleOwner {
     }
 
     // ---------------------------------------------------------------- notification
+    /**
+     * Android 15+ stops `dataSync` foreground services after six hours. The
+     * agent is meant to stay reachable all day, so on API 34+ it declares
+     * `specialUse` (unlimited) instead. Older releases fall back to dataSync.
+     */
+    private fun linkType(): Int =
+        if (Build.VERSION.SDK_INT >= 34) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+        } else {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        }
+
     private fun foreground(types: Int) {
         ServiceCompat.startForeground(this, NOTIF_ID, buildNotification(), types)
         state.update { it.copy(running = true, code = prefs.lanCode, lanUrl = it.lanUrl) }
     }
+
+    /** Re-render the shade entry after the silent toggle or a code rotation. */
+    fun refreshNotification() = notifyForeground()
 
     private fun notifyForeground() {
         val manager = getSystemService(android.app.NotificationManager::class.java)
@@ -210,18 +223,30 @@ class DeviceService : Service(), LifecycleOwner {
             Intent(this, DeviceService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+        val quiet = prefs.silent
         val ip = DeviceStats.lanIp() ?: "this phone"
-        val text = "code ${prefs.lanCode} · ws://$ip:$LAN_PORT/agent"
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val text = if (quiet) {
+            // Silent mode: no pairing code, IP or LAN address on the lock screen.
+            "Connected · tap to open"
+        } else {
+            "code ${prefs.lanCode} · ws://$ip:$LAN_PORT/agent"
+        }
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_airlock)
-            .setContentTitle("Airlock is listening")
+            .setContentTitle(if (quiet) "Airlock" else "Airlock is listening")
             .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSilent(true)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
+            .setLocalOnly(true)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .setContentIntent(open)
             .addAction(0, "Stop", stop)
-            .build()
+        if (!quiet) builder.setStyle(NotificationCompat.BigTextStyle().bigText(text))
+        return builder.build()
     }
 
     private fun keepAwake() {
@@ -243,7 +268,7 @@ class DeviceService : Service(), LifecycleOwner {
     }
 
     companion object {
-        const val CHANNEL_ID = "airlock-service"
+        const val CHANNEL_ID = "airlock-link-quiet"
         const val LAN_PORT = 8787
         const val NOTIF_ID = 4711
 

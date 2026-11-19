@@ -84,6 +84,33 @@ export function Settings({
           </p>
         </Card>
 
+        <Card title="Quiet operation">
+          <div className="kv">
+            <span>Silent mode on phone</span>
+            <span>{device?.silent === undefined ? '—' : device.silent ? 'on' : 'off'}</span>
+          </div>
+          <p className="muted" style={{ margin: '8px 0 12px', fontSize: 12 }}>
+            When on, volume changes draw no panel, input errors stay off the phone screen, the link
+            notification loses its status-bar icon and hides the pairing code and IP on the lock screen.
+          </p>
+          <button
+            className="btn btn-sm"
+            disabled={!device}
+            onClick={async () => {
+              try {
+                const res = await link.request<any>('device.action', {
+                  action: device?.silent ? 'silent.off' : 'silent.on',
+                });
+                toast(res?.silent ? 'silent mode is on' : 'silent mode is off', 'ok');
+              } catch (e: any) {
+                toast(e?.message || 'could not change silent mode', 'bad');
+              }
+            }}
+          >
+            <Icon name="shield" size={14} /> {device?.silent ? 'Leave silent mode' : 'Enter silent mode'}
+          </button>
+        </Card>
+
         <Card title="Device permissions">
           {PERMISSIONS.map((p) => {
             const state = p.key ? device?.permissions?.[p.key] : undefined;
@@ -118,8 +145,9 @@ export function Settings({
             );
           })}
           <p className="faint" style={{ fontSize: 11.5, marginBottom: 0 }}>
-            Android 14 requires a visible foreground-service notification for screen capture,
-            camera and microphone. Airlock surfaces that instead of hiding it.
+            Android requires a foreground-service entry for the link. In silent mode it is a
+            minimum-importance shade line with no status-bar icon; denying Notifications on
+            Android 13+ hides it entirely without stopping the agent.
           </p>
         </Card>
 
@@ -188,7 +216,7 @@ export function Settings({
             for free-tier hosting. It shares no code, assets or protocol with AirDroid.
             Do not use it to access devices you do not own.
           </p>
-          <div className="kv"><span>Dashboard</span><span>1.0.1</span></div>
+          <div className="kv"><span>Dashboard</span><span>1.0.2</span></div>
           <div className="kv"><span>Protocol</span><span>1</span></div>
           <div className="kv"><span>License</span><span>MIT</span></div>
           <div className="row mt-16">

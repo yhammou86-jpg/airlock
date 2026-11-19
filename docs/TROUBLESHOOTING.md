@@ -1,6 +1,6 @@
 # Troubleshooting the Android agent
 
-The 1.0.1 agent replaces silent hangs with explicit errors. When something fails
+The 1.0.1+ agent replaces silent hangs with explicit errors. When something fails
 the dashboard now shows `permission`, `timeout` or `handler_error` and the reason
 instead of waiting forever. Use this page to map that reason to a fix.
 
@@ -96,15 +96,32 @@ button reports that, open Airlock on the phone and use its Permissions card.
 
 ## Silent mode
 
-On by default on the phone. It removes the volume panel pop and the
-accessibility “no focused field” toast, and reports those failures to the
-dashboard instead. It cannot hide:
+On by default on the phone, and toggleable from the dashboard under
+**Settings → Quiet operation**.
 
-- the foreground-service notification (required for camera and screen capture)
-- the MediaProjection consent dialog (required per session)
+What it removes:
+
+- the volume panel on `volume.*`
+- the accessibility “no focused field” toast (the dashboard gets an error instead)
+- the status-bar icon for the link (channel importance is `MIN`)
+- the pairing code, LAN IP and socket URL from the shade and lock screen
+
+What it cannot remove, by Android policy:
+
+- the foreground-service entry itself (minimum importance, so it is a silent
+  shade line with no icon). On Android 13+ you can additionally deny
+  **Notifications** for Airlock: the service keeps running and the shade entry
+  disappears completely.
+- the MediaProjection “Start recording or casting?” approval, once per session
+- the green camera/microphone privacy dot while a capture is active
 - the system permission dialogs
 
-Toggle it under Airlock → **Behaviour → Silent mode**.
+`find` still rings on purpose. Screen mirroring shows the system cast indicator
+for as long as the projection is live.
+
+1.0.2 also switches the foreground service from `dataSync` to `specialUse` on
+Android 14+, because Android 15+ stops `dataSync` services after six hours.
+That keeps an idle agent reachable all day without extra notifications.
 
 ## Link keeps reconnecting
 

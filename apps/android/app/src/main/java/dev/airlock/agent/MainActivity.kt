@@ -353,7 +353,8 @@ private fun AgentScreen() {
                 Column(Modifier.weight(1f)) {
                     Text("Silent mode", color = TextMain, fontSize = 13.sp)
                     Text(
-                        "Remote volume changes stay off this screen and input errors are reported to the dashboard instead of a toast.",
+                        "No volume panel, no toasts, no status-bar icon, and the link notification shows no code, IP or lock-screen text. " +
+                            "Remote volume and key errors go to the dashboard instead of this screen.",
                         color = TextDim,
                         fontSize = 11.sp,
                     )
@@ -361,12 +362,15 @@ private fun AgentScreen() {
                 TextButton(onClick = {
                     prefs.silent = !silent
                     silent = prefs.silent
+                    DeviceService.instance?.refreshNotification()
+                    DeviceService.core?.broadcastHello()
                 }) { Text(if (silent) "on" else "off", color = if (silent) Ok else TextDim) }
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                "Android still shows the foreground-service notification required for camera and screen capture. " +
-                    "Open this screen and tap “Allow capture” once per session for mirroring.",
+                "Android always requires a foreground-service entry and the one-time “Start recording?” approval for mirroring; " +
+                    "silent mode reduces the entry to a silent shade line. On Android 13+ you can deny Notifications to hide that " +
+                    "line too — the agent keeps running. The green camera/mic privacy dot cannot be suppressed by any app.",
                 color = TextDim,
                 fontSize = 11.sp,
             )

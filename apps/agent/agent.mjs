@@ -58,6 +58,7 @@ const state = {
   ripples: [],
   typed: '',
   lastAction: 'idle',
+  silent: true,
   uptimeStart: Date.now(),
 };
 
@@ -545,11 +546,14 @@ const handlers = {
       case 'wake': state.lastAction = 'screen wake'; break;
       case 'lock': state.lastAction = 'screen lock'; break;
       case 'find': broadcastEvent('log', { level: 'warn', message: 'find phone: ringing at full volume' }); break;
+      case 'silent.on': state.silent = true; break;
+      case 'silent.off': state.silent = false; break;
+      case 'silent.toggle': state.silent = !state.silent; break;
       default: throw new Error(`unsupported action ${a}`);
     }
     state.lastAction = a;
     broadcastEvent('log', { level: 'info', message: `action ${a}` });
-    return { action: a, state: { volume: state.volume, muted: state.muted, flashlight: state.flashlight, media: state.media } };
+    return { action: a, silent: state.silent, state: { volume: state.volume, muted: state.muted, flashlight: state.flashlight, media: state.media } };
   },
 
   'apps.list'() { return { apps }; },
@@ -603,7 +607,7 @@ function attach(ws, { remote = false } = {}) {
             device: { id: DEVICE_ID, name: NAME, model: 'Airlock Reference', android: '14', agent: '1.0.1', ip: ipAddress(), port: PORT },
             capabilities: Object.keys(handlers),
             permissions: { camera: true, smsRead: true, smsSend: true, notifications: true, accessibility: true, allFiles: true, battery: true },
-            silent: true,
+            silent: state.silent,
           },
         });
         pushStats();
@@ -685,7 +689,7 @@ function connectCloud() {
         device: { id: DEVICE_ID, name: NAME, model: 'Airlock Reference', android: '14', agent: '1.0.1', ip: ipAddress(), port: PORT },
         capabilities: Object.keys(handlers),
         permissions: { camera: true, smsRead: true, smsSend: true, notifications: true, accessibility: true, allFiles: true, battery: true },
-        silent: true,
+        silent: state.silent,
       },
     });
     pushStats();
