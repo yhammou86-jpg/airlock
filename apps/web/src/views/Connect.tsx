@@ -170,7 +170,7 @@ export function Connect({ onConnect, busy, error, relayDefault, last }: Props) {
           <Icon name="phone" size={14} />
           <span>
             Android agent:{' '}
-            <a href="/airlock-1.0.2-debug.apk" download>
+            <a href="/airlock-1.0.3-debug.apk" download>
               download the APK
             </a>{' '}
             (debug build, sideload)

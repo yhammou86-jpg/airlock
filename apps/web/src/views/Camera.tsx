@@ -42,7 +42,7 @@ export function CameraView({ link, toast }: { link: Link; toast: (t: string, ton
     setBusy(true);
     const started = performance.now();
     try {
-      const res = await link.request<any>('camera.shot', { lens: l }, 35000);
+      const res = await link.request<any>('camera.shot', { lens: l }, 20000);
       setLatency(Math.round(performance.now() - started));
       setShot((prev) => ({
         ...(prev || { ts: Date.now() / 1000 }),
@@ -58,7 +58,7 @@ export function CameraView({ link, toast }: { link: Link; toast: (t: string, ton
       setError(message);
       failures.current += 1;
       if (!quiet || failures.current === 1) toast(message, 'bad');
-      if (failures.current >= 3) setLive(false);
+      if (failures.current >= 2) setLive(false);
       return false;
     } finally {
       busyRef.current = false;
@@ -128,9 +128,9 @@ export function CameraView({ link, toast }: { link: Link; toast: (t: string, ton
           <div className="warn-strip">
             <Icon name="shield" size={15} />
             <span>
-              Camera access needs the runtime camera permission and a foreground service of type
-              <code>camera</code> on Android 14+. Airlock never records silently; the capture
-              notification is mandatory.
+              A snapshot needs the runtime camera permission. Each request has a 20 second watchdog, and
+              “live” stops itself after two failures instead of spinning forever. Android still shows the
+              camera privacy dot while a frame is being taken.
             </span>
           </div>
         </div>

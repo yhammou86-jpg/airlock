@@ -101,7 +101,7 @@ async function lan() {
   wrong.close();
 
   await c.request('auth', { code: CODE });
-  await sleep(150);
+  await sleep(500);
   check('auth + hello', !!c.hello?.device?.id, c.hello?.device?.name);
   check('hello advertises capabilities', (c.hello?.capabilities || []).length > 10,
     `${c.hello?.capabilities?.length} methods`);
@@ -120,6 +120,17 @@ async function lan() {
   check('fs.download streams every byte', got.length === onDisk.length,
     `${got.length}/${onDisk.length} B in ${chunks.length} frame(s)`);
   check('fs.download checksum matches disk', sha256(got) === sha256(onDisk));
+
+  // ---- preview (reply first, then one PREVIEW frame)
+  const previewFrames = [];
+  const offPreview = c.onFrame((f) => {
+    if (f.kind === FrameKind.PREVIEW) previewFrames.push(Buffer.from(f.payload));
+  });
+  const previewMeta = await c.request('fs.preview', { path: '/Photos/welcome.svg' }, 30000);
+  await sleep(120);
+  offPreview();
+  check('fs.preview sends one downscaled frame', previewFrames.length === 1 && previewMeta.bytes > 0,
+    `${previewMeta.bytes} B in ${previewFrames.length} frame(s)`);
 
   // ---- upload
   const body = Buffer.from(`Airlock e2e ${new Date().toISOString()}\n`);

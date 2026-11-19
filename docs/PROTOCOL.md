@@ -82,7 +82,7 @@ Sent by the device on attach (and re-sent on `auth`):
 ```json
 { "type": "hello", "data": {
   "device": { "id": "demo-3f8a1c", "name": "Pixel 8", "model": "Pixel 8",
-              "android": "14", "agent": "airlock-android/1.0.2",
+              "android": "14", "agent": "airlock-android/1.0.3",
               "ip": "192.168.1.24", "port": 8787 },
   "capabilities": ["device.stats", "fs.list", "mirror.start", "..."],
   "permissions": { "camera": true, "smsRead": false, "smsSend": false,
@@ -126,14 +126,15 @@ the browser never needs to know the phone's pixel size.
 | `device.stats` | `{}` | same shape as `event:stats` |
 | `device.action` | `{ action, value? }` | `{ action, ok }` or `{ text }` |
 | `device.permission` | `{ permission }` | `{ opened }` — opens the matching Settings screen |
-| `fs.list` | `{ path }` | `{ path, entries[], allFiles, root }` |
+| `fs.list` | `{ path }` | `{ path, entries[], total, truncated, allFiles, root }` |
 | `fs.mkdir` | `{ path, name }` | `{ created }` |
 | `fs.rename` | `{ path, name, newName }` | `{ path }` |
 | `fs.delete` | `{ paths: [] }` | `{ deleted }` |
 | `fs.upload.begin` | `{ path, name, size, sha256 }` | `{ uploadId, path }` |
 | `fs.upload.done` | `{ uploadId, sha256 }` | `{ path, size, sha256, ok }` |
 | `fs.download` | `{ path }` | `{ name, size, sha256 }` after binary frames |
-| `mirror.start` | `{ fps, quality, maxWidth }` | `{ fps, quality, control, silent }` |
+| `fs.preview` | `{ path }` | `{ path, bytes, ts }` then one `PREVIEW` frame |
+| `mirror.start` | `{ fps, quality, maxWidth }` | `{ fps, quality, control, silent, capture }` |
 | `mirror.stop` | `{}` | `{ ok }` |
 | `input.tap` | `{ x, y }` | `{ tapped }` |
 | `input.swipe` | `{ x1, y1, x2, y2, ms }` | `{ swiped }` |
@@ -156,6 +157,20 @@ queued. The Android agent caps the JPEG at 1440 px on the long edge and rejects
 overlapping captures with `handler_error`. Mirror frames are best-effort: the
 agent drops them while its socket backlog exceeds 512 KB rather than delaying
 request/response traffic.
+
+`fs.preview` follows the same reply-first pattern and returns a JPEG capped at
+1280 px on the long edge (EXIF rotation applied) in a `PREVIEW` frame. The
+dashboard uses it for the image modal, so opening a 5 MB photo transfers tens of
+KB instead of the original. `fs.list` is cached on the phone for four seconds,
+returns at most 400 entries and adds `total`/`truncated` when a folder is larger.
+
+`mirror.start` prefers silent capture. When the accessibility service is enabled
+and declares `canTakeScreenshot` (Android 11+), the agent uses
+`AccessibilityService.takeScreenshot()` and reports `capture: "accessibility"`;
+Android shows no MediaProjection approval dialog and no cast indicator. The
+platform throttles the API to roughly one frame per 333 ms, so the reported `fps`
+is 2-3 regardless of the requested rate. Otherwise the agent falls back to
+MediaProjection (`capture: "projection"`), which needs the one-time approval.
 
 File entry:
 
@@ -189,8 +204,10 @@ Silent mode is a device-side policy. When on, volume changes pass no
 `FLAG_SHOW_UI`, accessibility failures return an error instead of a toast, the
 foreground-service entry uses minimum importance (no status-bar icon, no sound,
 hidden on the lock screen) and omits the pairing code and IP. Android still
-requires that entry and the per-session MediaProjection approval; neither can be
-removed without root. The camera/microphone privacy indicator is system-owned.
+requires that entry; it cannot be removed without notification permission or
+root. Mirroring needs no approval once the accessibility screenshot capability is
+enabled (Android 11+); MediaProjection remains the fallback and still shows the
+system approval. The camera/microphone privacy indicator is system-owned.
 
 `input.key` accepts `home`, `back`, `recents`, `notifications`, `lock`,
 `backspace`, `enter`. `power` is rejected on unrooted devices.
@@ -211,6 +228,7 @@ All integers little-endian. `payload` is everything after byte 15.
 | 3 | `UPLOAD` | next chunk of a file, in order |
 | 4 | `DOWNLOAD` | next chunk of a file, in order |
 | 5 | `AUDIO` | reserved |
+| 6 | `PREVIEW` | one downscaled image preview, sent in reply to `fs.preview` |
 
 | codec | payload | |
 | --- | --- | --- |
@@ -237,10 +255,11 @@ All integers little-endian. `payload` is everything after byte 15.
 ### Mirror
 
 1. `mirror.start` enables the capture pipeline for that peer.
-2. Frames arrive as `MIRROR` with codec 1 at roughly the requested fps.
+2. Frames arrive as `MIRROR` with codec 1. Silent accessibility capture runs at
+   about 3 fps; the MediaProjection fallback runs at the requested rate.
 3. `mirror.stop` (or disconnect) releases the capture when the last viewer goes.
 
-Capture is shared: five viewers cost one MediaProjection session.
+Capture is shared: five viewers cost one session, whichever mode is active.
 
 ## 5. Relay HTTP API
 

@@ -25,6 +25,7 @@ object Protocol {
         const val UPLOAD = 3
         const val DOWNLOAD = 4
         const val AUDIO = 5
+        const val PREVIEW = 6
     }
 
     object Codec {
@@ -112,6 +113,9 @@ object Protocol {
             "png" -> "image/png"
             "webp" -> "image/webp"
             "gif" -> "image/gif"
+            "bmp" -> "image/bmp"
+            "heic", "heif" -> "image/heic"
+            "avif" -> "image/avif"
             "mp4", "m4v" -> "video/mp4"
             "mp3" -> "audio/mpeg"
             "m4a" -> "audio/mp4"
@@ -129,7 +133,7 @@ object Protocol {
         listOf(
             "device.stats", "device.action", "device.permission",
             "fs.list", "fs.mkdir", "fs.rename", "fs.delete",
-            "fs.upload.begin", "fs.upload.done", "fs.download",
+            "fs.upload.begin", "fs.upload.done", "fs.download", "fs.preview",
             "mirror.start", "mirror.stop",
             "input.tap", "input.swipe", "input.longpress", "input.key", "input.text",
             "sms.threads", "sms.messages", "sms.send",

@@ -17,23 +17,55 @@ export function Files({ link, toast }: { link: Link; toast: (t: string, tone?: T
   const [modal, setModal] = useState<null | { kind: 'mkdir' | 'rename' | 'delete' | 'preview'; target?: Entry; value?: string }>(null);
   const [preview, setPreview] = useState<{ url: string; name: string } | null>(null);
   const [scope, setScope] = useState<{ allFiles: boolean; root: string } | null>(null);
+  const [total, setTotal] = useState<number | null>(null);
+  const [truncated, setTruncated] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const dirCache = useRef(new Map<string, { entries: Entry[]; total: number; truncated: boolean }>());
+  const previewCache = useRef(new Map<string, string>());
 
-  const refresh = useCallback(async (p = path) => {
-    setLoading(true);
+  const refresh = useCallback(async (p = path, force = false) => {
+    const hit = force ? undefined : dirCache.current.get(p);
+    if (hit) {
+      // Paint the last listing immediately so navigating back is instant, then
+      // refresh in the background.
+      setEntries(hit.entries);
+      setTotal(hit.total);
+      setTruncated(hit.truncated);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
       const res = await link.request<any>('fs.list', { path: p }, 45000);
-      setEntries(res.entries || []);
+      const next: Entry[] = res.entries || [];
+      const count = typeof res.total === 'number' ? res.total : next.length;
+      const cut = !!res.truncated;
+      setEntries(next);
+      setTotal(count);
+      setTruncated(cut);
+      dirCache.current.set(p, { entries: next, total: count, truncated: cut });
       if (typeof res.allFiles === 'boolean') setScope({ allFiles: res.allFiles, root: res.root || '/' });
     } catch (e: any) {
+      if (!hit) {
+        setEntries([]);
+        setTotal(null);
+        setTruncated(false);
+      }
       toast(e?.message || 'could not list folder', 'bad');
-      setEntries([]);
     } finally {
       setLoading(false);
     }
   }, [link, path, toast]);
 
   useEffect(() => { refresh(); }, [path]); // eslint-disable-line
+
+  useEffect(() => {
+    const urls = previewCache.current;
+    return () => {
+      urls.forEach((u) => URL.revokeObjectURL(u));
+      urls.clear();
+    };
+  }, []);
 
   function updateTransfer(id: string, patch: Partial<Transfer>) {
     setTransfers((list) => list.map((t) => (t.id === id ? { ...t, ...patch } : t)));
@@ -53,6 +85,7 @@ export function Files({ link, toast }: { link: Link; toast: (t: string, tone?: T
         toast(`${file.name}: ${e?.message || 'upload failed'}`, 'bad');
       }
     }
+    dirCache.current.delete(path);
     refresh();
   }
 
@@ -71,11 +104,23 @@ export function Files({ link, toast }: { link: Link; toast: (t: string, tone?: T
   }
 
   async function previewImage(e: Entry) {
+    const cached = previewCache.current.get(e.path);
+    if (cached) {
+      setPreview({ url: cached, name: e.name });
+      return;
+    }
     try {
-      toast('fetching preview…', 'info');
-      const res = await link.download(e.path);
-      const url = URL.createObjectURL(res.blob);
-      setPreview({ url, name: e.name });
+      const res = await link.preview(e.path);
+      if (previewCache.current.size >= 12) {
+        const oldest = previewCache.current.keys().next();
+        if (!oldest.done) {
+          const url = previewCache.current.get(oldest.value);
+          if (url) URL.revokeObjectURL(url);
+          previewCache.current.delete(oldest.value);
+        }
+      }
+      previewCache.current.set(e.path, res.url);
+      setPreview({ url: res.url, name: e.name });
     } catch (err: any) {
       toast(err?.message || 'preview failed', 'bad');
     }
@@ -98,6 +143,7 @@ export function Files({ link, toast }: { link: Link; toast: (t: string, tone?: T
         toast(`${target.name} deleted`, 'ok');
       }
       setModal(null);
+      dirCache.current.delete(path);
       refresh();
     } catch (e: any) {
       toast(e?.message || 'operation failed', 'bad');
@@ -112,10 +158,13 @@ export function Files({ link, toast }: { link: Link; toast: (t: string, tone?: T
       <div className="page-head">
         <div>
           <h1>Files</h1>
-          <p>{entries.length} items · checksummed transfers over the same socket</p>
+          <p>
+            {truncated && total !== null ? `${entries.length} of ${total}` : entries.length} items · thumbnails are
+            rendered on the phone, so previews never download the original
+          </p>
         </div>
         <div className="spacer" />
-        <button className="btn btn-sm" onClick={() => refresh()} disabled={loading}>
+        <button className="btn btn-sm" onClick={() => refresh(path, true)} disabled={loading}>
           {loading ? <Spinner size={13} /> : <Icon name="refresh" size={14} />} Refresh
         </button>
         <button className="btn btn-sm" onClick={() => setModal({ kind: 'mkdir', value: 'New folder' })}>
@@ -154,6 +203,16 @@ export function Files({ link, toast }: { link: Link; toast: (t: string, tone?: T
           >
             Grant
           </button>
+        </div>
+      )}
+
+      {truncated && (
+        <div className="warn-strip" style={{ marginBottom: 14 }}>
+          <Icon name="warning" size={15} />
+          <span>
+            Showing the first {entries.length} of {total} items in this folder. Open a subfolder or use the
+            filter to narrow it down.
+          </span>
         </div>
       )}
 
@@ -284,12 +343,12 @@ export function Files({ link, toast }: { link: Link; toast: (t: string, tone?: T
       )}
 
       {preview && (
-        <div className="modal-back" onClick={() => { URL.revokeObjectURL(preview.url); setPreview(null); }}>
+        <div className="modal-back" onClick={() => setPreview(null)}>
           <div style={{ maxWidth: '86vw', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
             <img src={preview.url} alt={preview.name} style={{ maxWidth: '86vw', maxHeight: '78vh', borderRadius: 12, border: '1px solid var(--line-2)' }} />
             <div className="row" style={{ justifyContent: 'center', marginTop: 12 }}>
               <span className="mono faint">{preview.name}</span>
-              <button className="btn btn-sm" onClick={() => { URL.revokeObjectURL(preview.url); setPreview(null); }}>
+              <button className="btn btn-sm" onClick={() => setPreview(null)}>
                 <Icon name="x" size={14} /> Close
               </button>
             </div>

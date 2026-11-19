@@ -22,7 +22,8 @@ The design comes from a clean-room teardown of AirDroid 4.3.12.0 — read
 | --- | --- | --- |
 | Pair with a six digit code | yes | yes |
 | Browse, upload, download, rename, delete files | yes | yes |
-| Live screen mirror (JPEG frames) | yes | yes |
+| Fast photo previews (thumbnail rendered on the phone) | yes | yes |
+| Live screen mirror (silent on Android 11+, JPEG frames) | yes | yes |
 | Tap, swipe, long-press, keys, text input | yes | yes |
 | SMS threads, read and send | yes | yes |
 | Notification feed, dismiss, inline reply | yes | yes |
@@ -85,8 +86,8 @@ supabase/         optional accounts + history schema with RLS
 
 `apps/android` is a complete Gradle/Kotlin project implementing the same
 messages as the reference agent: NanoWSD LAN server, OkHttp relay client,
-MediaProjection mirroring, accessibility input, SMS provider, notification
-listener, CameraX snapshots, foreground service.
+silent accessibility mirroring (MediaProjection fallback), accessibility input,
+SMS provider, notification listener, CameraX snapshots, foreground service.
 
 It must be sideloaded because `READ_SMS`, `SEND_SMS` and
 `MANAGE_EXTERNAL_STORAGE` are not grantable on Google Play. Build instructions
@@ -97,14 +98,14 @@ A compiled debug build is available for direct download:
 
 | build | size | package |
 | --- | --- | --- |
-| [Airlock 1.0.2 (debug)](https://airlock-rho.vercel.app/airlock-1.0.2-debug.apk) | 9.7 MiB | `dev.airlock.agent`, minSdk 26, targetSdk 34 |
+| [Airlock 1.0.3 (debug)](https://airlock-rho.vercel.app/airlock-1.0.3-debug.apk) | 9.8 MiB | `dev.airlock.agent`, minSdk 26, targetSdk 34 |
 
 It is debug-signed with the standard Android debug keystore, which is fine for
 sideloading but not for a store. Open the link on the phone and allow installs
-from the browser, or `adb install -r airlock-1.0.2-debug.apk`.
+from the browser, or `adb install -r airlock-1.0.3-debug.apk`.
 
 If a page reports a timeout or a permission error, see
-[`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md) — 1.0.2 surfaces the real
+[`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md) — 1.0.3 surfaces the real
 reason instead of hanging.
 
 ## Test
@@ -115,9 +116,9 @@ npm run e2e        # in another
 ```
 
 The suite checks pairing rejection, hello/capabilities, filesystem listing,
-checksum-verified download and upload, mirror frames, SMS, notifications, stats,
-and every relay path (claim, single-use codes, routing both ways, binary frames,
-room rejection, health).
+photo preview frames, checksum-verified download and upload, mirror frames, SMS,
+notifications, stats, and every relay path (claim, single-use codes, routing both
+ways, binary frames, room rejection, health).
 
 ## Security posture
 

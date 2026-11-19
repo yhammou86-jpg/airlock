@@ -1,4 +1,4 @@
-import { decodeFrame, encodeFrame, FrameKind, CHUNK_BYTES } from '@proto';
+import { decodeFrame, encodeFrame, FrameKind, CHUNK_BYTES, mimeFor } from '@proto';
 
 export type LinkStatus = 'idle' | 'connecting' | 'online' | 'reconnecting' | 'error';
 
@@ -28,6 +28,7 @@ export type DeviceInfo = {
   agent?: string;
   ip?: string;
   port?: number;
+  silentCapture?: boolean;
   capabilities?: string[];
   permissions?: {
     camera?: boolean;
@@ -35,6 +36,7 @@ export type DeviceInfo = {
     smsSend?: boolean;
     notifications?: boolean;
     accessibility?: boolean;
+    screenshot?: boolean;
     allFiles?: boolean;
     battery?: boolean;
   };
@@ -237,6 +239,30 @@ export class Link {
     try {
       const res = await this.request<any>('fs.download', { path }, 600000);
       return { blob: new Blob(chunks as any), name: res.name, size: res.size };
+    } finally {
+      off();
+    }
+  }
+
+  async preview(path: string, timeout = 20000): Promise<{ url: string; bytes: number }> {
+    let url: string | null = null;
+    let bytes = 0;
+    const off = this.onFrame((f) => {
+      if (f.kind !== FrameKind.PREVIEW) return;
+      // A newer preview supersedes the previous temporary object URL.
+      if (url) URL.revokeObjectURL(url);
+      url = URL.createObjectURL(new Blob([f.payload as any], { type: mimeFor(f.codec) }));
+      bytes = f.payload.byteLength;
+    });
+    try {
+      const res = await this.request<any>('fs.preview', { path }, timeout);
+      // The reply is sent first, then the JPEG; both arrive on the same socket.
+      for (let i = 0; i < 100 && !url; i++) await wait(20);
+      if (!url) throw new Error('preview frame did not arrive');
+      return { url, bytes: res?.bytes ?? bytes };
+    } catch (e) {
+      if (url) URL.revokeObjectURL(url);
+      throw e;
     } finally {
       off();
     }

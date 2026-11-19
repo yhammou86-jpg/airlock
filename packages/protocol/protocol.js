@@ -19,6 +19,7 @@ export const FrameKind = {
   UPLOAD: 3,
   DOWNLOAD: 4,
   AUDIO: 5,
+  PREVIEW: 6,
 };
 
 /** Payload codecs for MIRROR / CAMERA frames. */

@@ -71,6 +71,7 @@ async function seed() {
     'welcome.txt': 'This folder is the demo device filesystem.\nEverything here is real: list, upload, download, rename, delete.\n',
     'Documents/notes.md': '# Notes\n\n- Pair from the dashboard with code 123456\n- Try dragging a file onto the Files view\n',
     'Photos/README.txt': 'Drop images here; they stream back over the download channel.\n',
+    'Photos/welcome.svg': '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400"><rect width="640" height="400" fill="#0f2233"/><text x="40" y="200" font-family="system-ui" font-size="32" fill="#dcecff">Airlock preview</text></svg>\n',
     'Music/playlist.m3u': '#EXTM3U\n# Airlock demo playlist\n',
   };
   for (const [rel, body] of Object.entries(files)) {
@@ -275,6 +276,22 @@ function svgScreen() {
   </svg>`;
 }
 
+function svgPreview(name, size) {
+  const label = String(name).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480">
+  <defs><linearGradient id="p" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#0f2233"/><stop offset="1" stop-color="#1b3a52"/>
+  </linearGradient></defs>
+  <rect width="640" height="480" fill="url(#p)"/>
+  <rect x="24" y="24" width="592" height="432" rx="18" fill="none" stroke="#7fb2ff" stroke-opacity="0.3"/>
+  <text x="48" y="112" font-family="system-ui" font-size="26" fill="#e6f1ff">${label}</text>
+  <text x="48" y="152" font-family="monospace" font-size="16" fill="#8fb0d0">${size} B · preview rendered on the device</text>
+  <text x="48" y="196" font-family="monospace" font-size="14" fill="#6f8ba8">the real agent sends a downscaled JPEG here</text>
+  <circle cx="560" cy="112" r="42" fill="#7fb2ff" opacity="0.14"/>
+  <circle cx="560" cy="112" r="26" fill="#7fb2ff" opacity="0.24"/>
+  </svg>`;
+}
+
 function svgCamera(lens) {
   const now = new Date();
   const t = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
@@ -429,6 +446,15 @@ const handlers = {
     session.upload = null;
     broadcastEvent('log', { level: ok ? 'info' : 'error', message: `upload ${ok ? 'ok' : 'checksum mismatch'} · ${rel(up.abs)} · ${st.size} B` });
     return { path: rel(up.abs), size: st.size, sha256: digest, ok };
+  },
+
+  async 'fs.preview'(d, session) {
+    const abs = safeJoin(d.path);
+    const st = await fsp.stat(abs);
+    if (st.isDirectory()) throw new Error('is a directory');
+    const svg = svgPreview(path.basename(abs), st.size);
+    session.previewFrame = svg;
+    return { path: d.path, bytes: Buffer.byteLength(svg), ts: Date.now() };
   },
 
   async 'fs.download'(d, session) {
@@ -604,9 +630,9 @@ function attach(ws, { remote = false } = {}) {
         send(session, {
           v: 1, type: 'hello', ts: Date.now(),
           data: {
-            device: { id: DEVICE_ID, name: NAME, model: 'Airlock Reference', android: '14', agent: '1.0.1', ip: ipAddress(), port: PORT },
+            device: { id: DEVICE_ID, name: NAME, model: 'Airlock Reference', android: '14', agent: '1.0.3', ip: ipAddress(), port: PORT, silentCapture: true },
             capabilities: Object.keys(handlers),
-            permissions: { camera: true, smsRead: true, smsSend: true, notifications: true, accessibility: true, allFiles: true, battery: true },
+            permissions: { camera: true, smsRead: true, smsSend: true, notifications: true, accessibility: true, screenshot: true, allFiles: true, battery: true },
             silent: state.silent,
           },
         });
@@ -626,6 +652,14 @@ function attach(ws, { remote = false } = {}) {
     try {
       const result = await fn(req.data || {}, session);
       send(session, response(req, result ?? {}));
+      if (req.type === 'fs.preview' && session.previewFrame) {
+        const svg = session.previewFrame;
+        session.previewFrame = null;
+        session.ws.send(
+          encodeFrame({ kind: FrameKind.PREVIEW, codec: Codec.SVG }, Buffer.from(svg, 'utf8')),
+          { binary: true },
+        );
+      }
     } catch (err) {
       send(session, failure(req, 'handler_error', err?.message || String(err)));
     }

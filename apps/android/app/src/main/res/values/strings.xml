@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">Airlock</string>
     <string name="accessibility_label">Airlock remote control</string>
-    <string name="accessibility_description">Lets a paired browser tap, swipe and type on this device. Airlock never reads the screen through this service; it only injects gestures you send.</string>
+    <string name="accessibility_description">Lets a paired browser tap, swipe and type on this device, and on Android 11+ send it screen frames without the screen-capture approval dialog. Frames go only to the paired Airlock browser.</string>
     <string name="notification_label">Airlock notifications</string>
     <string name="channel_service">Device link</string>
     <string name="channel_service_desc">Keeps the Airlock agent reachable while the screen is off.</string>

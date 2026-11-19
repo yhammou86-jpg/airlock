@@ -54,9 +54,24 @@ class CameraController(
     }
 
     private suspend fun capture(lens: String): File = suspendCancellableCoroutine { cont ->
+        var provider: ProcessCameraProvider? = null
+        var file: File? = null
+
+        // If the dashboard gives up (watchdog) or navigates away, release the
+        // camera immediately and drop the partial file. Without this the camera
+        // stayed bound and the next snapshot failed with "camera in use".
+        cont.invokeOnCancellation {
+            file?.delete()
+            val bound = provider
+            if (bound != null) {
+                ContextCompat.getMainExecutor(context).execute {
+                    runCatching { bound.unbindAll() }
+                }
+            }
+        }
+
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
-            var provider: ProcessCameraProvider? = null
             try {
                 provider = future.get()
                 val selector = if (lens == "front") {
@@ -79,11 +94,12 @@ class CameraController(
                     .setResolutionSelector(resolution)
                     .build()
 
-                provider.unbindAll()
-                provider.bindToLifecycle(owner, selector, capture)
+                provider?.unbindAll()
+                provider?.bindToLifecycle(owner, selector, capture)
 
-                val file = File(context.cacheDir, "airlock-shot-${System.currentTimeMillis()}.jpg")
-                val options = ImageCapture.OutputFileOptions.Builder(file).build()
+                val shotFile = File(context.cacheDir, "airlock-shot-${System.currentTimeMillis()}.jpg")
+                file = shotFile
+                val options = ImageCapture.OutputFileOptions.Builder(shotFile).build()
 
                 capture.takePicture(
                     options,
@@ -91,11 +107,11 @@ class CameraController(
                     object : ImageCapture.OnImageSavedCallback {
                         override fun onImageSaved(results: ImageCapture.OutputFileResults) {
                             provider?.unbindAll()
-                            if (cont.isActive) cont.resume(file) else file.delete()
+                            if (cont.isActive) cont.resume(shotFile) else shotFile.delete()
                         }
 
                         override fun onError(exception: ImageCaptureException) {
-                            file.delete()
+                            shotFile.delete()
                             provider?.unbindAll()
                             if (cont.isActive) {
                                 cont.resumeWithException(

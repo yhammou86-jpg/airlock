@@ -13,7 +13,7 @@ const PERMISSIONS: Array<{ name: string; perm: string; rpc: string; key?: PermKe
   { name: 'SMS', perm: 'READ_SMS, SEND_SMS', rpc: 'sms.threads / messages / send', key: 'smsRead', open: 'sms' },
   { name: 'Camera', perm: 'CAMERA + foregroundServiceType=camera', rpc: 'camera.shot', key: 'camera', open: 'camera' },
   { name: 'Always online', perm: 'Battery optimisation exemption', rpc: 'push link', key: 'battery', open: 'battery' },
-  { name: 'Screen mirror', perm: 'MediaProjection consent (per session)', rpc: 'mirror.start' },
+  { name: 'Screen mirror', perm: 'Accessibility screenshots (silent) or MediaProjection', rpc: 'mirror.start', key: 'screenshot', open: 'accessibility' },
   { name: 'Clipboard', perm: 'Android 10+ blocks background clipboard read', rpc: 'device.action clipboard.*' },
 ];
 
@@ -92,6 +92,7 @@ export function Settings({
           <p className="muted" style={{ margin: '8px 0 12px', fontSize: 12 }}>
             When on, volume changes draw no panel, input errors stay off the phone screen, the link
             notification loses its status-bar icon and hides the pairing code and IP on the lock screen.
+            With Accessibility enabled, mirroring is silent too — no “Start recording?” approval.
           </p>
           <button
             className="btn btn-sm"
@@ -216,7 +217,7 @@ export function Settings({
             for free-tier hosting. It shares no code, assets or protocol with AirDroid.
             Do not use it to access devices you do not own.
           </p>
-          <div className="kv"><span>Dashboard</span><span>1.0.2</span></div>
+          <div className="kv"><span>Dashboard</span><span>1.0.3</span></div>
           <div className="kv"><span>Protocol</span><span>1</span></div>
           <div className="kv"><span>License</span><span>MIT</span></div>
           <div className="row mt-16">

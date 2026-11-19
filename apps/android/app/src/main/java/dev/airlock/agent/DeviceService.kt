@@ -41,6 +41,7 @@ class DeviceService : Service(), LifecycleOwner {
     private lateinit var prefs: Prefs
     private lateinit var scope: CoroutineScope
     private lateinit var screen: ScreenCapture
+    private lateinit var silent: SilentMirror
     private lateinit var core: DeviceCore
     private var camera: CameraController? = null
     private var lanServer: LanServer? = null
@@ -55,8 +56,9 @@ class DeviceService : Service(), LifecycleOwner {
         prefs = Prefs(this)
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         screen = ScreenCapture(this)
+        silent = SilentMirror()
         camera = CameraController(this, this)
-        core = DeviceCore(this, prefs, screen, camera!!, scope)
+        core = DeviceCore(this, prefs, screen, silent, camera!!, scope)
         DeviceService.core = core
 
         foreground(linkType())
@@ -121,6 +123,7 @@ class DeviceService : Service(), LifecycleOwner {
         } catch (_: Exception) {
         }
         lanServer = null
+        silent.stop()
         screen.release()
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
@@ -262,7 +265,7 @@ class DeviceService : Service(), LifecycleOwner {
             it.copy(
                 clients = core.clientCount(),
                 code = prefs.lanCode,
-                mirrored = it.mirrored && screen.isRunning,
+                mirrored = core.captureRunning(),
             )
         }
     }

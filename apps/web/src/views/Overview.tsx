@@ -47,7 +47,6 @@ export function Overview({ link, device, stats, logs, onNavigate, toast }: Props
         </div>
         <div className="spacer" />
         <Pill tone="ok"><span className="dot dot-live" /> connected</Pill>
-        <Pill tone="info">{device?.capabilities?.length || 0} capabilities</Pill>
       </div>
 
       <div className="stat-grid">
@@ -151,18 +150,6 @@ export function Overview({ link, device, stats, logs, onNavigate, toast }: Props
             <div className="kv"><span>Uptime</span><span>{formatUptime(stats.uptime)}</span></div>
             <div className="kv"><span>Volume</span><span>{stats.muted ? 'muted' : `${stats.volume ?? '—'} / 15`}</span></div>
             <div className="kv"><span>Last event</span><span>{formatDate(logs[0]?.ts)}</span></div>
-          </Card>
-
-          <Card title="What this link can do">
-            <div className="row row-wrap gap-8">
-              {(device?.capabilities || []).slice(0, 18).map((c) => (
-                <span className="pill pill-muted" key={c}>{c}</span>
-              ))}
-            </div>
-            <p className="faint" style={{ fontSize: 11.5, marginBottom: 0 }}>
-              Capabilities are declared by the agent on connect. The dashboard hides
-              actions the device does not implement.
-            </p>
           </Card>
         </div>
       </div>

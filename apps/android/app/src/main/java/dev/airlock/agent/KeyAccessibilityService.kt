@@ -1,10 +1,12 @@
 package dev.airlock.agent
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
 import android.content.ComponentName
 import android.content.Context
 import android.graphics.Path
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
@@ -49,6 +51,19 @@ class KeyAccessibilityService : AccessibilityService() {
     }
 
     fun global(action: Int): Boolean = performGlobalAction(action)
+
+    /**
+     * True when the platform will let this service grab frames silently. This
+     * reflects the `canTakeScreenshot` flag in accessibility_service_config.xml;
+     * some OEM builds ignore it, so callers still fall back to MediaProjection.
+     */
+    val supportsScreenshot: Boolean
+        get() = if (Build.VERSION.SDK_INT >= 30) {
+            val capabilities = serviceInfo?.capabilities ?: 0
+            capabilities and AccessibilityServiceInfo.CAPABILITY_CAN_TAKE_SCREENSHOT != 0
+        } else {
+            false
+        }
 
     /** Replace the focused field's contents (works with any IME). */
     fun type(text: String): Boolean {

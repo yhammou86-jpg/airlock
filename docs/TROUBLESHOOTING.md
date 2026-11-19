@@ -17,7 +17,8 @@ too.
 - the JPEG is capped at 1440 px on the long edge, quality 72
 - the JSON reply is sent before the image bytes
 - the dashboard waits for each frame before asking again and stops “live” after
-  three failures
+  two failures; 1.0.3 also wraps `camera.shot` in the same reply watchdog as every
+  other RPC, so a stuck driver can no longer leave the spinner running
 
 If it still fails, the message now says why:
 
@@ -69,8 +70,12 @@ service was killed — reopen Airlock and re-enable it.
 - Without it the root is the app's own folder
   `/sdcard/Android/data/dev.airlock.agent/files`. That is deliberate scoping,
   not a failure. The Files page now shows a banner with a **Grant** button.
-- `fs.list` has a 45 s client timeout; a folder with thousands of entries can be
-  slow the first time. The agent caps listings at 1000 entries.
+- `fs.list` is cached on the phone for four seconds, so going back to a folder is
+  instant. Listings are capped at 400 entries; larger folders return
+  `truncated: true` with the real `total`, and the Files page shows a banner.
+- Image previews no longer download the original. `fs.preview` renders an
+  EXIF-rotated JPEG capped at 1280 px on the phone and sends it in a `PREVIEW`
+  frame, so opening a photo is tens of KB instead of several MB.
 - Downloads stream in 64 KiB frames and share the socket with mirror frames. The
   agent pauses when the outgoing queue exceeds 1.5 MB; the client allows 10
   minutes for a download. Stop the mirror before moving very large files.
@@ -87,9 +92,32 @@ Gesture and key injection requires the accessibility service:
 3. `mirror.start` also returns `control: true|false`; the dashboard uses it to
    show the banner immediately.
 
-Screen mirroring itself needs **Allow capture** once per session (Android
-revokes MediaProjection after a reboot). Without it `mirror.start` returns
-`screen capture not approved`.
+## Mirror: “could not start capture” or the approval dialog
+
+1.0.3 prefers silent capture through the accessibility service. Enable it once:
+
+1. Airlock → Permissions → **Accessibility (touch + keys)** → enable Airlock.
+2. Mirror again. `mirror.start` reports `capture: "accessibility"` and Android
+   shows no “Start recording or casting?” dialog and no cast indicator. The same
+   service also injects taps, swipes and keys.
+3. Android throttles accessibility screenshots to roughly one per 333 ms, so
+   silent mirroring runs at about 3 fps. That is a platform limit, not link lag.
+
+If accessibility is off (or an OEM refuses the screenshot capability), the agent
+falls back to MediaProjection:
+
+- open Airlock on the phone and tap **Allow capture** once, or
+- re-enable Accessibility, which removes the prompt entirely.
+
+Without either, `mirror.start` returns `could not start capture` with an
+explanation instead of leaving a blank screen.
+
+### Camera snapshot spinner
+
+Fixed in 1.0.3. `camera.shot` is now inside the reply watchdog and the client
+times out after 20 seconds. A cancelled capture also unbinds CameraX in
+`CameraController`, so the next attempt is not blocked by “camera in use”. Live
+mode stops itself after two consecutive failures.
 
 Android 16 may block opening Settings from the background. If the **Enable**
 button reports that, open Airlock on the phone and use its Permissions card.
@@ -112,12 +140,14 @@ What it cannot remove, by Android policy:
   shade line with no icon). On Android 13+ you can additionally deny
   **Notifications** for Airlock: the service keeps running and the shade entry
   disappears completely.
-- the MediaProjection “Start recording or casting?” approval, once per session
 - the green camera/microphone privacy dot while a capture is active
 - the system permission dialogs
 
-`find` still rings on purpose. Screen mirroring shows the system cast indicator
-for as long as the projection is live.
+With the accessibility service enabled, mirroring needs **no** MediaProjection
+approval. Android revokes only the fallback projection token after a reboot.
+
+`find` still rings on purpose. Silent accessibility mirroring shows no cast
+indicator; the MediaProjection fallback does, for as long as it is live.
 
 1.0.2 also switches the foreground service from `dataSync` to `specialUse` on
 Android 14+, because Android 15+ stops `dataSync` services after six hours.

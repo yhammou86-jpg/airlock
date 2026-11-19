@@ -38,6 +38,7 @@ export function Mirror({ link, toast }: { link: Link; toast: (t: string, tone?: 
   const { frame, fps } = useFrames(link, 1);
   const [streaming, setStreaming] = useState(false);
   const [control, setControl] = useState<boolean | null>(link.device?.permissions?.accessibility ?? null);
+  const [capture, setCapture] = useState<'accessibility' | 'projection' | null>(null);
   const [rate, setRate] = useState(10);
   const [gesture, setGesture] = useState<'tap' | 'swipe' | 'longpress'>('tap');
   const [text, setText] = useState('');
@@ -53,10 +54,16 @@ export function Mirror({ link, toast }: { link: Link; toast: (t: string, tone?: 
 
   const start = useCallback(async () => {
     try {
-      const res = await link.request<any>('mirror.start', { fps: rate, quality: 70, maxWidth: 720 });
+      const res = await link.request<any>('mirror.start', { fps: rate, quality: 70, maxWidth: 720 }, 25000);
       setStreaming(true);
+      setCapture(res.capture === 'accessibility' ? 'accessibility' : 'projection');
       if (typeof res.control === 'boolean') setControl(res.control);
-      toast(`mirroring at ${res.fps || rate} fps`, 'ok');
+      toast(
+        res.capture === 'accessibility'
+          ? `mirroring silently at ${res.fps || rate} fps — no approval needed`
+          : `mirroring at ${res.fps || rate} fps`,
+        'ok',
+      );
     } catch (e: any) {
       toast(e?.message || 'could not start mirror', 'bad');
     }
@@ -72,6 +79,17 @@ export function Mirror({ link, toast }: { link: Link; toast: (t: string, tone?: 
     return () => { link.request('mirror.stop', {}).catch(() => {}); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // If a capture mode claims to run but no frame ever arrives, stop pretending.
+  useEffect(() => {
+    if (!streaming || frame) return;
+    const timer = setTimeout(() => {
+      toast('mirror started but no frames arrived — check the accessibility service on the phone', 'warn');
+      setStreaming(false);
+      link.request('mirror.stop', {}).catch(() => {});
+    }, 9000);
+    return () => clearTimeout(timer);
+  }, [streaming, frame, link, toast]);
 
   function pointAt(ev: React.PointerEvent | React.MouseEvent) {
     const img = imgRef.current;
@@ -185,6 +203,7 @@ export function Mirror({ link, toast }: { link: Link; toast: (t: string, tone?: 
         <div className="mirror-side">
           <Card title="Session">
             <div className="kv"><span>Gesture</span><span>{gesture}</span></div>
+            <div className="kv"><span>Capture</span><span>{capture === 'accessibility' ? 'silent (accessibility)' : capture === 'projection' ? 'projection (approved)' : '—'}</span></div>
             <div className="kv"><span>Frame rate</span><span>{fps} fps</span></div>
             <div className="kv"><span>Codec</span><span>{frame ? (frame.codec === 1 ? 'jpeg' : frame.codec === 2 ? 'webp' : frame.codec === 3 ? 'svg (demo)' : 'png') : '—'}</span></div>
             <div className="kv"><span>Last frame</span><span>{frame ? new Date(frame.ts * 1000).toLocaleTimeString() : '—'}</span></div>
@@ -196,6 +215,12 @@ export function Mirror({ link, toast }: { link: Link; toast: (t: string, tone?: 
                 {[5, 10, 15, 20].map((v) => <option key={v} value={v}>{v} fps</option>)}
               </select>
             </div>
+            <p className="faint" style={{ fontSize: 11.5, marginBottom: 0 }}>
+              With the Airlock accessibility service enabled, frames come through it and Android shows no
+              approval dialog — now or on later sessions. Otherwise Airlock falls back to MediaProjection,
+              which asks once per session. Android throttles silent capture to roughly 3 fps, so the live
+              rate is the real one shown above.
+            </p>
           </Card>
 
           <Card title="Pointer">
@@ -273,10 +298,10 @@ export function Mirror({ link, toast }: { link: Link; toast: (t: string, tone?: 
             <Icon name={control === false ? 'warning' : 'shield'} size={15} />
             <span>
               {control === false
-                ? 'View-only: the accessibility service is off, so taps, swipes and keys are ignored by the phone.'
+                ? 'Enable the Airlock accessibility service on the phone: it unlocks taps, swipes and keys and makes mirroring silent (no approval dialog).'
                 : control === true
-                  ? 'Touch, keyboard and hardware keys are injected through the Airlock accessibility service.'
-                  : 'Enable the Airlock accessibility service on the phone to unlock remote control.'}
+                  ? 'Touch, keyboard and hardware keys are injected through the Airlock accessibility service, which also powers silent capture.'
+                  : 'Enable the Airlock accessibility service on the phone to unlock remote control and silent capture.'}
             </span>
             {control === false && (
               <button
