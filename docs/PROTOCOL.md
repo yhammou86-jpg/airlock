@@ -82,7 +82,7 @@ Sent by the device on attach (and re-sent on `auth`):
 ```json
 { "type": "hello", "data": {
   "device": { "id": "demo-3f8a1c", "name": "Pixel 8", "model": "Pixel 8",
-              "android": "14", "agent": "airlock-android/1.0.3",
+              "android": "14", "agent": "airlock-android/1.0.4",
               "ip": "192.168.1.24", "port": 8787 },
   "capabilities": ["device.stats", "fs.list", "mirror.start", "..."],
   "permissions": { "camera": true, "smsRead": false, "smsSend": false,
@@ -159,7 +159,7 @@ agent drops them while its socket backlog exceeds 512 KB rather than delaying
 request/response traffic.
 
 `fs.preview` follows the same reply-first pattern and returns a JPEG capped at
-1280 px on the long edge (EXIF rotation applied) in a `PREVIEW` frame. The
+1080 px on the long edge (EXIF rotation applied) in a `PREVIEW` frame. The
 dashboard uses it for the image modal, so opening a 5 MB photo transfers tens of
 KB instead of the original. `fs.list` is cached on the phone for four seconds,
 returns at most 400 entries and adds `total`/`truncated` when a folder is larger.
@@ -200,12 +200,12 @@ Notification: `{ id, app, title, body, ts, canReply }`.
 | `clipboard.get` / `clipboard.set` | `{ text }` |
 | `light`/`dark` (dashboard only) | not sent to the device |
 
-Silent mode is a device-side policy. When on, volume changes pass no
-`FLAG_SHOW_UI`, accessibility failures return an error instead of a toast, the
-foreground-service entry uses minimum importance (no status-bar icon, no sound,
-hidden on the lock screen) and omits the pairing code and IP. Android still
-requires that entry; it cannot be removed without notification permission or
-root. Mirroring needs no approval once the accessibility screenshot capability is
+Silent mode is a device-side policy. Volume changes pass no `FLAG_SHOW_UI` and
+accessibility failures return an error instead of a toast. The mandatory
+foreground-service notification is posted to a channel with `IMPORTANCE_NONE`:
+Android requires the notification object, but nothing is shown in the shade,
+status bar or lock screen. The pairing code and IP are omitted from its content.
+Mirroring needs no approval once the accessibility screenshot capability is
 enabled (Android 11+); MediaProjection remains the fallback and still shows the
 system approval. The camera/microphone privacy indicator is system-owned.
 

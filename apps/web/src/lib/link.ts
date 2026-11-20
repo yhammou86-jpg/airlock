@@ -244,20 +244,30 @@ export class Link {
     }
   }
 
-  async preview(path: string, timeout = 20000): Promise<{ url: string; bytes: number }> {
+  async preview(path: string, timeout = 30000): Promise<{ url: string; bytes: number }> {
     let url: string | null = null;
     let bytes = 0;
+    let notify: (() => void) | null = null;
+    const arrived = new Promise<void>((resolve) => { notify = resolve; });
     const off = this.onFrame((f) => {
       if (f.kind !== FrameKind.PREVIEW) return;
       // A newer preview supersedes the previous temporary object URL.
       if (url) URL.revokeObjectURL(url);
       url = URL.createObjectURL(new Blob([f.payload as any], { type: mimeFor(f.codec) }));
       bytes = f.payload.byteLength;
+      notify?.();
     });
+    const started = Date.now();
     try {
       const res = await this.request<any>('fs.preview', { path }, timeout);
-      // The reply is sent first, then the JPEG; both arrive on the same socket.
-      for (let i = 0; i < 100 && !url; i++) await wait(20);
+      // The agent replies as soon as the JPEG is encoded and streams the frame
+      // right after. On a slow mobile uplink that frame can trail the reply by
+      // several seconds, so wait out the remaining budget instead of a fixed
+      // two seconds (which made previews fail while the frame was in flight).
+      if (!url) {
+        const left = Math.max(2000, timeout - (Date.now() - started));
+        await Promise.race([arrived, wait(left)]);
+      }
       if (!url) throw new Error('preview frame did not arrive');
       return { url, bytes: res?.bytes ?? bytes };
     } catch (e) {

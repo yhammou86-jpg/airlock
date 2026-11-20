@@ -98,7 +98,7 @@ class DeviceCore(
             .put("name", prefs.deviceName)
             .put("model", Build.MODEL)
             .put("android", Build.VERSION.RELEASE)
-            .put("agent", "airlock-android/1.0.3")
+            .put("agent", "airlock-android/1.0.4")
             .put("ip", DeviceStats.lanIp() ?: JSONObject.NULL)
             .put("port", DeviceService.LAN_PORT)
             .put("silentCapture", silent.isAvailable)

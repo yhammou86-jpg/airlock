@@ -10,18 +10,20 @@ class AirlockApp : Application() {
         super.onCreate()
         val manager = getSystemService(NotificationManager::class.java)
 
-        // 1.0.0/1.0.1 used a LOW channel, which draws a status-bar icon and
-        // alerts on every change. Remove it so upgraded installs go quiet too.
+        // Earlier builds used LOW/MIN channels, which still draw a silent line
+        // in the shade. Remove both so upgraded installs inherit the hidden one.
         manager.deleteNotificationChannel("airlock-service")
+        manager.deleteNotificationChannel("airlock-link-quiet")
 
-        // IMPORTANCE_MIN keeps the mandatory foreground-service entry in the
-        // shade only: no status-bar icon, no heads-up, no sound, no vibration.
-        // A new id is required because Android ignores importance changes on an
-        // existing channel.
+        // IMPORTANCE_NONE blocks the channel: the mandatory foreground-service
+        // notification is still posted (Android requires it) but never appears
+        // in the shade, on the lock screen or as a status-bar icon. A new id is
+        // required because Android ignores importance changes on an existing
+        // channel. Android may still list the service in the Task Manager.
         val channel = NotificationChannel(
             DeviceService.CHANNEL_ID,
             getString(R.string.channel_service),
-            NotificationManager.IMPORTANCE_MIN,
+            NotificationManager.IMPORTANCE_NONE,
         ).apply {
             description = getString(R.string.channel_service_desc)
             setShowBadge(false)

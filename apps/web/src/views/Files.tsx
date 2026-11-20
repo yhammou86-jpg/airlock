@@ -16,6 +16,7 @@ export function Files({ link, toast }: { link: Link; toast: (t: string, tone?: T
   const [drag, setDrag] = useState(false);
   const [modal, setModal] = useState<null | { kind: 'mkdir' | 'rename' | 'delete' | 'preview'; target?: Entry; value?: string }>(null);
   const [preview, setPreview] = useState<{ url: string; name: string } | null>(null);
+  const [previewBusy, setPreviewBusy] = useState<string | null>(null);
   const [scope, setScope] = useState<{ allFiles: boolean; root: string } | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [truncated, setTruncated] = useState(false);
@@ -103,26 +104,44 @@ export function Files({ link, toast }: { link: Link; toast: (t: string, tone?: T
     }
   }
 
+  function rememberPreview(path: string, url: string) {
+    if (previewCache.current.size >= 12) {
+      const oldest = previewCache.current.keys().next();
+      if (!oldest.done) {
+        const old = previewCache.current.get(oldest.value);
+        if (old) URL.revokeObjectURL(old);
+        previewCache.current.delete(oldest.value);
+      }
+    }
+    previewCache.current.set(path, url);
+  }
+
   async function previewImage(e: Entry) {
     const cached = previewCache.current.get(e.path);
     if (cached) {
       setPreview({ url: cached, name: e.name });
       return;
     }
+    setPreview(null);
+    setPreviewBusy(e.name);
     try {
       const res = await link.preview(e.path);
-      if (previewCache.current.size >= 12) {
-        const oldest = previewCache.current.keys().next();
-        if (!oldest.done) {
-          const url = previewCache.current.get(oldest.value);
-          if (url) URL.revokeObjectURL(url);
-          previewCache.current.delete(oldest.value);
-        }
-      }
-      previewCache.current.set(e.path, res.url);
+      rememberPreview(e.path, res.url);
       setPreview({ url: res.url, name: e.name });
     } catch (err: any) {
-      toast(err?.message || 'preview failed', 'bad');
+      // Older agents (and formats the phone cannot decode) fall back to the
+      // original file, so a click still shows the image instead of an error.
+      try {
+        const res = await link.download(e.path);
+        const url = URL.createObjectURL(res.blob);
+        rememberPreview(e.path, url);
+        setPreview({ url, name: e.name });
+        toast('showed the original — update the phone agent for fast previews', 'warn');
+      } catch (err2: any) {
+        toast(err?.message || err2?.message || 'preview failed', 'bad');
+      }
+    } finally {
+      setPreviewBusy(null);
     }
   }
 
@@ -338,6 +357,16 @@ export function Files({ link, toast }: { link: Link; toast: (t: string, tone?: T
                 {modal.kind === 'delete' ? 'Delete' : 'Save'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {previewBusy && (
+        <div className="modal-back">
+          <div style={{ textAlign: 'center', minWidth: 220 }}>
+            <Spinner size={26} />
+            <div className="mono" style={{ marginTop: 12, color: 'var(--text)' }}>{previewBusy}</div>
+            <div className="faint" style={{ fontSize: 12, marginTop: 4 }}>rendering a preview on the phone…</div>
           </div>
         </div>
       )}

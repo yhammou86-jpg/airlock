@@ -287,8 +287,8 @@ class FsStore(private val context: Context) {
         /** Enough for a phone folder without flooding the browser with JSON. */
         private const val MAX_ENTRIES = 400
 
-        private const val PREVIEW_MAX_EDGE = 1280
-        private const val PREVIEW_QUALITY = 80
+        private const val PREVIEW_MAX_EDGE = 1080
+        private const val PREVIEW_QUALITY = 78
         private const val PREVIEW_CACHE_BYTES = 12 * 1024 * 1024
     }
 }

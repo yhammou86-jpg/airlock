@@ -74,7 +74,7 @@ service was killed — reopen Airlock and re-enable it.
   instant. Listings are capped at 400 entries; larger folders return
   `truncated: true` with the real `total`, and the Files page shows a banner.
 - Image previews no longer download the original. `fs.preview` renders an
-  EXIF-rotated JPEG capped at 1280 px on the phone and sends it in a `PREVIEW`
+  EXIF-rotated JPEG capped at 1080 px on the phone and sends it in a `PREVIEW`
   frame, so opening a photo is tens of KB instead of several MB.
 - Downloads stream in 64 KiB frames and share the socket with mirror frames. The
   agent pauses when the outgoing queue exceeds 1.5 MB; the client allows 10
@@ -131,17 +131,22 @@ What it removes:
 
 - the volume panel on `volume.*`
 - the accessibility “no focused field” toast (the dashboard gets an error instead)
-- the status-bar icon for the link (channel importance is `MIN`)
+- the link notification entirely (channel importance is `NONE`, so nothing is
+  drawn in the shade, status bar or lock screen; the app never asks for
+  notification permission)
 - the pairing code, LAN IP and socket URL from the shade and lock screen
 
 What it cannot remove, by Android policy:
 
-- the foreground-service entry itself (minimum importance, so it is a silent
-  shade line with no icon). On Android 13+ you can additionally deny
-  **Notifications** for Airlock: the service keeps running and the shade entry
-  disappears completely.
+- the foreground-service notification object itself: Android requires the
+  service to post one, and it may list Airlock in the Task Manager, but it is not
+  displayed
 - the green camera/microphone privacy dot while a capture is active
 - the system permission dialogs
+
+If a vendor build still shows its own “running in background” notice, open
+Airlock → Behaviour → **Link notification → settings** and set the *Device link*
+channel to **Off**. The service keeps running.
 
 With the accessibility service enabled, mirroring needs **no** MediaProjection
 approval. Android revokes only the fallback projection token after a reboot.

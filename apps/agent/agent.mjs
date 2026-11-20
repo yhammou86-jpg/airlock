@@ -630,7 +630,7 @@ function attach(ws, { remote = false } = {}) {
         send(session, {
           v: 1, type: 'hello', ts: Date.now(),
           data: {
-            device: { id: DEVICE_ID, name: NAME, model: 'Airlock Reference', android: '14', agent: '1.0.3', ip: ipAddress(), port: PORT, silentCapture: true },
+            device: { id: DEVICE_ID, name: NAME, model: 'Airlock Reference', android: '14', agent: '1.0.4', ip: ipAddress(), port: PORT, silentCapture: true },
             capabilities: Object.keys(handlers),
             permissions: { camera: true, smsRead: true, smsSend: true, notifications: true, accessibility: true, screenshot: true, allFiles: true, battery: true },
             silent: state.silent,

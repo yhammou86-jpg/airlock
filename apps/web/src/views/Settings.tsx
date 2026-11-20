@@ -217,7 +217,7 @@ export function Settings({
             for free-tier hosting. It shares no code, assets or protocol with AirDroid.
             Do not use it to access devices you do not own.
           </p>
-          <div className="kv"><span>Dashboard</span><span>1.0.3</span></div>
+          <div className="kv"><span>Dashboard</span><span>1.0.4</span></div>
           <div className="kv"><span>Protocol</span><span>1</span></div>
           <div className="kv"><span>License</span><span>MIT</span></div>
           <div className="row mt-16">

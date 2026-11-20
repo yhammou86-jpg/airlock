@@ -207,12 +207,19 @@ class DeviceService : Service(), LifecycleOwner {
         state.update { it.copy(running = true, code = prefs.lanCode, lanUrl = it.lanUrl) }
     }
 
-    /** Re-render the shade entry after the silent toggle or a code rotation. */
+    /** Re-post the shade entry after the silent toggle or a code rotation. */
     fun refreshNotification() = notifyForeground()
 
     private fun notifyForeground() {
-        val manager = getSystemService(android.app.NotificationManager::class.java)
-        manager?.notify(NOTIF_ID, buildNotification())
+        // Deliberately no NotificationManager.notify(): on Android 13+ that
+        // needs POST_NOTIFICATIONS, which this app does not hold (the whole
+        // point is an invisible link). Re-running startForeground updates the
+        // notification and is allowed without the runtime permission.
+        try {
+            foreground(linkType())
+        } catch (e: Exception) {
+            Log.w(TAG, "notification refresh failed: ${e.message}")
+        }
     }
 
     private fun buildNotification(): Notification {
@@ -271,7 +278,7 @@ class DeviceService : Service(), LifecycleOwner {
     }
 
     companion object {
-        const val CHANNEL_ID = "airlock-link-quiet"
+        const val CHANNEL_ID = "airlock-link-hidden"
         const val LAN_PORT = 8787
         const val NOTIF_ID = 4711
 

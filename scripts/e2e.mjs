@@ -105,6 +105,8 @@ async function lan() {
   check('auth + hello', !!c.hello?.device?.id, c.hello?.device?.name);
   check('hello advertises capabilities', (c.hello?.capabilities || []).length > 10,
     `${c.hello?.capabilities?.length} methods`);
+  check('hello advertises silent capture', c.hello?.device?.silentCapture === true &&
+    c.hello?.permissions?.screenshot === true);
 
   const list = await c.request('fs.list', { path: '/' });
   const names = list.entries.map((e) => e.name);
